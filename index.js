@@ -214,11 +214,8 @@ app.post('/auth/forgot-password', authLimiter, validateSchema(forgotPasswordSche
       });
     }
 
-    // Gerar link de redefinição de senha
-    const resetLink = await auth.generatePasswordResetLink(email, {
-      url: process.env.RESET_PASSWORD_URL || BASE_URL,
-      handleCodeInApp: false
-    });
+    // Gerar link de redefinição de senha (sem URL customizada para evitar erro de autorização)
+    const resetLink = await auth.generatePasswordResetLink(email);
 
     res.json({
       success: true,
@@ -241,6 +238,12 @@ app.post('/auth/forgot-password', authLimiter, validateSchema(forgotPasswordSche
       statusCode = 404;
     } else if (error.code === 'auth/invalid-email') {
       message = 'Email inválido';
+      statusCode = 400;
+    } else if (error.code === 'auth/unauthorized-continue-uri') {
+      message = 'URL de continuação não autorizada no Firebase';
+      statusCode = 400;
+    } else if (error.code === 'auth/invalid-continue-uri') {
+      message = 'URL de continuação inválida';
       statusCode = 400;
     }
 
