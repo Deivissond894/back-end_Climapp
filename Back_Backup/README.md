@@ -53,8 +53,7 @@ https://climapp-1hxc.onrender.com
   ```json
   {
     "email": "usuario@exemplo.com",
-    "password": "senha123",
-    "rememberMe": false // opcional - true para sessão persistente (30 dias), false para temporária (1 dia)
+    "password": "senha123"
   }
   ```
 - **Resposta de Sucesso:**
@@ -68,10 +67,7 @@ https://climapp-1hxc.onrender.com
       "displayName": "Nome do Usuário",
       "customToken": "firebase_custom_token",
       "emailVerified": false,
-      "rememberMe": false,
-      "sessionType": "temporary", // "temporary" ou "persistent"
-      "suggestedExpiry": "2025-10-29T...", // Data sugerida de expiração
-      "note": "Token configurado para sessão temporária (1 dia)"
+      "note": "Use este customToken no cliente para fazer signInWithCustomToken"
     }
   }
   ```
@@ -177,27 +173,14 @@ const signup = async (email, password, displayName) => {
   return await response.json();
 };
 
-// Login (sessão temporária - padrão)
+// Login
 const login = async (email, password) => {
   const response = await fetch('https://climapp-1hxc.onrender.com/auth/login', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ email, password, rememberMe: false })
-  });
-  
-  return await response.json();
-};
-
-// Login com "Lembrar de mim" (sessão persistente)
-const loginWithRememberMe = async (email, password, rememberMe = true) => {
-  const response = await fetch('https://climapp-1hxc.onrender.com/auth/login', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ email, password, rememberMe })
+    body: JSON.stringify({ email, password })
   });
   
   return await response.json();

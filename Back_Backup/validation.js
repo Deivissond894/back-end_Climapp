@@ -39,12 +39,6 @@ const loginSchema = Joi.object({
     .required()
     .messages({
       'any.required': 'Senha é obrigatória'
-    }),
-  rememberMe: Joi.boolean()
-    .optional()
-    .default(false)
-    .messages({
-      'boolean.base': 'Lembrar de mim deve ser verdadeiro ou falso'
     })
 });
 

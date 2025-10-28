@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const { auth } = require('./firebase-config');
 const { 
@@ -37,6 +38,27 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100, // máximo 100 requests por IP por janela de tempo
+  message: {
+    success: false,
+    message: 'Muitas tentativas. Tente novamente em 15 minutos.'
+  }
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 5, // máximo 5 tentativas de auth por IP por janela de tempo
+  message: {
+    success: false,
+    message: 'Muitas tentativas de autenticação. Tente novamente em 15 minutos.'
+  }
+});
+
+app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -70,7 +92,7 @@ app.get('/', (req, res) => {
 });
 
 // Rota de Signup
-app.post('/auth/signup', validateSchema(signupSchema), async (req, res) => {
+app.post('/auth/signup', authLimiter, validateSchema(signupSchema), async (req, res) => {
   try {
     const { email, password, displayName } = req.body;
 
@@ -123,9 +145,9 @@ app.post('/auth/signup', validateSchema(signupSchema), async (req, res) => {
 });
 
 // Rota de Login
-app.post('/auth/login', validateSchema(loginSchema), async (req, res) => {
+app.post('/auth/login', authLimiter, validateSchema(loginSchema), async (req, res) => {
   try {
-    const { email, password, rememberMe = false } = req.body;
+    const { email, password } = req.body;
 
     // No Firebase Admin SDK não temos como fazer login direto com email/senha
     // O cliente precisa usar o Firebase Client SDK para isso
@@ -139,20 +161,8 @@ app.post('/auth/login', validateSchema(loginSchema), async (req, res) => {
       });
     }
 
-    // Definir claims personalizados baseado na opção "lembrar de mim"
-    const customClaims = {
-      rememberMe: rememberMe,
-      sessionType: rememberMe ? 'persistent' : 'temporary',
-      // Adicionar timestamp para controle de expiração no cliente
-      loginTime: Date.now(),
-      // Duração sugerida em milissegundos
-      suggestedExpiry: rememberMe 
-        ? Date.now() + (30 * 24 * 60 * 60 * 1000) // 30 dias
-        : Date.now() + (24 * 60 * 60 * 1000) // 1 dia
-    };
-
-    // Gerar token personalizado com claims customizados
-    const customToken = await auth.createCustomToken(userRecord.uid, customClaims);
+    // Gerar token personalizado para o usuário
+    const customToken = await auth.createCustomToken(userRecord.uid);
 
     res.json({
       success: true,
@@ -163,12 +173,7 @@ app.post('/auth/login', validateSchema(loginSchema), async (req, res) => {
         displayName: userRecord.displayName,
         customToken: customToken,
         emailVerified: userRecord.emailVerified,
-        rememberMe: rememberMe,
-        sessionType: customClaims.sessionType,
-        suggestedExpiry: new Date(customClaims.suggestedExpiry).toISOString(),
-        note: rememberMe 
-          ? 'Token configurado para sessão persistente (30 dias)' 
-          : 'Token configurado para sessão temporária (1 dia)'
+        note: 'Use este customToken no cliente para fazer signInWithCustomToken'
       }
     });
 
@@ -195,7 +200,7 @@ app.post('/auth/login', validateSchema(loginSchema), async (req, res) => {
 });
 
 // Rota de Forgot Password
-app.post('/auth/forgot-password', validateSchema(forgotPasswordSchema), async (req, res) => {
+app.post('/auth/forgot-password', authLimiter, validateSchema(forgotPasswordSchema), async (req, res) => {
   try {
     const { email } = req.body;
 
