@@ -234,7 +234,7 @@ app.post('/auth/forgot-password', authLimiter, validateSchema(forgotPasswordSche
     let statusCode = 500;
 
     if (error.code === 'auth/user-not-found') {
-      message = 'Usuário não encontrado';
+      message = 'Usuário não cadastrado/Email não incorreto';
       statusCode = 404;
     } else if (error.code === 'auth/invalid-email') {
       message = 'Email inválido';

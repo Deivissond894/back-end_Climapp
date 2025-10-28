@@ -135,7 +135,7 @@ app.post('/auth/login', validateSchema(loginSchema), async (req, res) => {
     if (!userRecord) {
       return res.status(404).json({
         success: false,
-        message: 'Usuário não encontrado'
+        message: 'Email e/ou senha incorretos'
       });
     }
 
@@ -179,7 +179,7 @@ app.post('/auth/login', validateSchema(loginSchema), async (req, res) => {
     let statusCode = 500;
 
     if (error.code === 'auth/user-not-found') {
-      message = 'Usuário não encontrado';
+      message = 'Email e/ou senha incorretos';
       statusCode = 404;
     } else if (error.code === 'auth/invalid-email') {
       message = 'Email inválido';
@@ -205,7 +205,7 @@ app.post('/auth/forgot-password', validateSchema(forgotPasswordSchema), async (r
     if (!userRecord) {
       return res.status(404).json({
         success: false,
-        message: 'Usuário não encontrado'
+        message: 'Email inválido ou não cadastrado'
       });
     }
 
@@ -229,7 +229,7 @@ app.post('/auth/forgot-password', validateSchema(forgotPasswordSchema), async (r
     let statusCode = 500;
 
     if (error.code === 'auth/user-not-found') {
-      message = 'Usuário não encontrado';
+      message = 'Email inválido ou não cadastrado';
       statusCode = 404;
     } else if (error.code === 'auth/invalid-email') {
       message = 'Email inválido';
