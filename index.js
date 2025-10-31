@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const axios = require('axios');
 require('dotenv').config();
 const { auth } = require('./firebase-config');
 const { 
@@ -127,25 +128,37 @@ app.post('/auth/login', validateSchema(loginSchema), async (req, res) => {
   try {
     const { email, password, rememberMe = false } = req.body;
 
-    // No Firebase Admin SDK não temos como fazer login direto com email/senha
-    // O cliente precisa usar o Firebase Client SDK para isso
-    // Aqui verificamos se o usuário existe e retornamos informações
-    const userRecord = await auth.getUserByEmail(email);
-
-    if (!userRecord) {
-      return res.status(404).json({
+    // Verificar credenciais usando Firebase Auth REST API
+    const FIREBASE_API_KEY = process.env.FIREBASE_WEB_API_KEY;
+    
+    if (!FIREBASE_API_KEY) {
+      return res.status(500).json({
         success: false,
-        message: 'Email e/ou senha incorretos'
+        message: 'Configuração do Firebase incompleta. Configure FIREBASE_WEB_API_KEY no .env'
       });
     }
+
+    // Fazer requisição para Firebase Auth REST API
+    const firebaseResponse = await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+      {
+        email: email,
+        password: password,
+        returnSecureToken: true
+      }
+    );
+
+    // Se chegou até aqui, as credenciais estão corretas
+    const firebaseUser = firebaseResponse.data;
+    
+    // Buscar dados completos do usuário no Firebase Admin
+    const userRecord = await auth.getUser(firebaseUser.localId);
 
     // Definir claims personalizados baseado na opção "lembrar de mim"
     const customClaims = {
       rememberMe: rememberMe,
       sessionType: rememberMe ? 'persistent' : 'temporary',
-      // Adicionar timestamp para controle de expiração no cliente
       loginTime: Date.now(),
-      // Duração sugerida em milissegundos
       suggestedExpiry: rememberMe 
         ? Date.now() + (30 * 24 * 60 * 60 * 1000) // 30 dias
         : Date.now() + (24 * 60 * 60 * 1000) // 1 dia
@@ -156,7 +169,7 @@ app.post('/auth/login', validateSchema(loginSchema), async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Usuário encontrado',
+      message: 'Login realizado com sucesso',
       data: {
         uid: userRecord.uid,
         email: userRecord.email,
@@ -178,9 +191,35 @@ app.post('/auth/login', validateSchema(loginSchema), async (req, res) => {
     let message = 'Erro ao fazer login';
     let statusCode = 500;
 
-    if (error.code === 'auth/user-not-found') {
+    // Tratar erros específicos da API do Firebase
+    if (error.response?.data?.error) {
+      const firebaseError = error.response.data.error;
+      
+      switch (firebaseError.message) {
+        case 'INVALID_PASSWORD':
+        case 'EMAIL_NOT_FOUND':
+          message = 'Email e/ou senha incorretos';
+          statusCode = 401;
+          break;
+        case 'INVALID_EMAIL':
+          message = 'Email inválido';
+          statusCode = 400;
+          break;
+        case 'USER_DISABLED':
+          message = 'Usuário desabilitado';
+          statusCode = 403;
+          break;
+        case 'TOO_MANY_ATTEMPTS_TRY_LATER':
+          message = 'Muitas tentativas. Tente novamente mais tarde';
+          statusCode = 429;
+          break;
+        default:
+          message = 'Erro na autenticação';
+          statusCode = 400;
+      }
+    } else if (error.code === 'auth/user-not-found') {
       message = 'Email e/ou senha incorretos';
-      statusCode = 404;
+      statusCode = 401;
     } else if (error.code === 'auth/invalid-email') {
       message = 'Email inválido';
       statusCode = 400;
@@ -189,7 +228,7 @@ app.post('/auth/login', validateSchema(loginSchema), async (req, res) => {
     res.status(statusCode).json({
       success: false,
       message: message,
-      error: error.code
+      error: error.response?.data?.error?.message || error.code || 'UNKNOWN_ERROR'
     });
   }
 });
