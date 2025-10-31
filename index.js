@@ -214,7 +214,7 @@ app.post('/auth/login', validateSchema(loginSchema), async (req, res) => {
           statusCode = 429;
           break;
         default:
-          message = 'Erro na autenticação';
+          message = 'Email e/ou senha incorretos';
           statusCode = 400;
       }
     } else if (error.code === 'auth/user-not-found') {
