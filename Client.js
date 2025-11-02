@@ -50,3 +50,31 @@ router.post('/', async (req, res) => {
 });
 
 module.exports = router;
+
+// Rota para listar clientes do usuário (GET /clientes/:uid)
+// Observação: essa versão exige o UID na URL e não verifica token (modo simples/teste).
+router.get('/:uid', async (req, res) => {
+	try {
+		const uid = req.params.uid;
+		if (!uid) {
+			return res.status(400).json({ success: false, message: 'UID não informado.' });
+		}
+
+		const clientsRef = admin.firestore().collection('Usuarios').doc(uid).collection('Clientes');
+
+		// Tenta ordenar por criadoEm, mas faz fallback caso campo não exista
+		let snapshot;
+		try {
+			snapshot = await clientsRef.orderBy('criadoEm', 'asc').get();
+		} catch (err) {
+			snapshot = await clientsRef.get();
+		}
+
+		const clients = [];
+		snapshot.forEach(doc => clients.push({ id: doc.id, ...doc.data() }));
+
+		return res.status(200).json({ success: true, count: clients.length, data: clients });
+	} catch (error) {
+		return res.status(500).json({ success: false, message: 'Erro ao buscar clientes.', error: error.message });
+	}
+});
