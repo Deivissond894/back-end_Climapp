@@ -10,6 +10,7 @@ const {
   forgotPasswordSchema, 
   validateSchema 
 } = require('./validation');
+const clientRoutes = require('./Client');
 
 const app = express();
 const PORT = process.env.PORT || 10000; // Render usa porta 10000 por padrão
@@ -40,6 +41,7 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use('/clientes', clientRoutes);
 
 // Middleware de tratamento de erros
 const errorHandler = (err, req, res, next) => {
