@@ -18,7 +18,9 @@ function sanitizeClientData(data) {
 }
 
 // Endpoint para cadastrar cliente
-router.post('/clientes', async (req, res) => {
+// Montado em index.js via app.use('/clientes', clientRoutes)
+// então aqui o caminho deve ser '/' para que o endpoint final seja POST /clientes
+router.post('/', async (req, res) => {
 	try {
 		const { uid, ...clientData } = req.body;
 		if (!uid) {
