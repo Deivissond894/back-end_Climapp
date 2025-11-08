@@ -11,6 +11,7 @@ const {
   validateSchema 
 } = require('./validation');
 const clientRoutes = require('./Client');
+const aiRoutes = require('./AI');
 
 const app = express();
 const PORT = process.env.PORT || 10000; // Render usa porta 10000 por padrão
@@ -42,6 +43,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/clientes', clientRoutes);
+app.use('/ai', aiRoutes);
 
 // Middleware de tratamento de erros
 const errorHandler = (err, req, res, next) => {
@@ -63,10 +65,22 @@ app.get('/', (req, res) => {
     baseUrl: BASE_URL,
     timestamp: new Date().toISOString(),
     endpoints: {
-      signup: `${BASE_URL}/auth/signup`,
-      login: `${BASE_URL}/auth/login`,
-      forgotPassword: `${BASE_URL}/auth/forgot-password`,
-      profile: `${BASE_URL}/auth/profile`,
+      authentication: {
+        signup: `${BASE_URL}/auth/signup`,
+        login: `${BASE_URL}/auth/login`,
+        forgotPassword: `${BASE_URL}/auth/forgot-password`,
+        profile: `${BASE_URL}/auth/profile`
+      },
+      clients: {
+        create: `${BASE_URL}/clientes`,
+        list: `${BASE_URL}/clientes/:uid`,
+        update: `${BASE_URL}/clientes/:uid/:clientId`,
+        delete: `${BASE_URL}/clientes/:uid/:clientId`
+      },
+      ai: {
+        processAudio: `${BASE_URL}/ai/process-audio`,
+        status: `${BASE_URL}/ai/status`
+      },
       health: `${BASE_URL}/health`
     }
   });
@@ -374,6 +388,14 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   POST ${BASE_URL}/auth/login - Fazer login`);
   console.log(`   POST ${BASE_URL}/auth/forgot-password - Redefinir senha`);
   console.log(`   GET ${BASE_URL}/auth/profile - Ver perfil (protegido)`);
+  console.log(`👥 Endpoints de clientes disponíveis:`);
+  console.log(`   POST ${BASE_URL}/clientes - Criar cliente`);
+  console.log(`   GET ${BASE_URL}/clientes/:uid - Listar clientes`);
+  console.log(`   PUT ${BASE_URL}/clientes/:uid/:clientId - Atualizar cliente`);
+  console.log(`   DELETE ${BASE_URL}/clientes/:uid/:clientId - Excluir cliente`);
+  console.log(`🤖 Endpoints de IA disponíveis:`);
+  console.log(`   POST ${BASE_URL}/ai/process-audio - Processar áudio com IA`);
+  console.log(`   GET ${BASE_URL}/ai/status - Status do serviço de IA`);
   console.log(`   GET ${BASE_URL}/health - Verificar saúde da API`);
   console.log(`🔒 CORS configurado para: ${ALLOWED_ORIGINS.join(', ')}`);
   console.log(`🔧 Ambiente: ${process.env.NODE_ENV || 'development'}`);
