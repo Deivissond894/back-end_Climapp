@@ -24,26 +24,27 @@ async function processAudioWithVoxtral(audioData, audioFormat = 'wav') {
 
 Sua tarefa é:
 1. Transcrever o áudio com precisão
-2. Identificar problemas técnicos mencionados
-3. Listar todas as peças/componentes mencionados
-4. Extrair ações necessárias ou serviços a serem realizados
-
+2. Listar todas as peças/componentes mencionados no audio
+3. Extrair ações ou serviços mencionados no audio
+Observação: Foque apenas nas informações técnicas mencionadas no áudio.
+Formato de resposta esperado (JSON):
 IMPORTANTE: Retorne APENAS um objeto JSON válido no seguinte formato, sem texto adicional:
 {
   "audio_transcrito": "transcrição completa do áudio aqui",
   "resultado": {
-    "problema_identificado": "descrição clara do problema ou problemas encontrados",
+    "problema_mencionado": "descrição clara do problema ou problemas mencionados no áudio ou 'Nenhum problema específico identificado' se não houver",
     "pecas_mencionadas": ["peça1", "peça2", "peça3"],
     "acao_necessaria": ["ação1", "ação2", "ação3"]
   }
 }
 
 Regras:
-- Se não houver problemas identificados, use: "Nenhum problema específico identificado"
+- Se não houver problemas identificados, use: "Nenhum problema específico mencionado"
 - Se não houver peças mencionadas, retorne array vazio: []
 - Se não houver ações mencionadas, retorne array vazio: []
 - Seja específico e profissional
-- Use termos técnicos apropriados da área de refrigeração`;
+- Use termos técnicos apropriados da área de refrigeração, climatização ou linha branca
+- Não adicione explicações ou texto fora do JSON solicitado`;
 
 		console.log('🤖 Enviando áudio para processamento com Voxtral...');
 
