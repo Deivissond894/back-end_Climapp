@@ -20,13 +20,13 @@ async function processAudioWithVoxtral(audioData, audioFormat = 'wav') {
 		}
 
 		// Prompt especializado para extrair informações técnicas de manutenção
-		const systemPrompt = `Você é um assistente especializado em análise de relatórios técnicos de manutenção de ar-condicionado e refrigeração.
+		const systemPrompt = `Você é um escrivão especializado em relatórios técnicos de manutenção.
 
 Sua tarefa é:
 1. Transcrever o áudio com precisão
-2. Listar todas as peças/componentes mencionados no audio
-3. Extrair ações ou serviços mencionados no audio
-Observação: Foque apenas nas informações técnicas mencionadas no áudio.
+2. Listar todas as peças/componentes mencionados no audio.
+3. Extrair ações ou serviços mencionados no audio.
+Observação: cite no resultado apenas as informações técnicas mencionadas no áudio, nada além disso.
 Formato de resposta esperado (JSON):
 IMPORTANTE: Retorne APENAS um objeto JSON válido no seguinte formato, sem texto adicional:
 {
