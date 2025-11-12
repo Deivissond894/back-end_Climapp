@@ -29,14 +29,28 @@ router.post('/', async (req, res) => {
 		// Sanitiza os dados recebidos
 		const sanitizedData = sanitizeClientData(clientData);
 
-		// Referência para coleção de clientes do usuário
-		const clientsRef = admin.firestore().collection('Usuarios').doc(uid).collection('Clientes');
-		// Busca todos os clientes para contar e gerar o próximo código
-		const snapshot = await clientsRef.get();
-		const nextNumber = snapshot.size + 1;
-		const clientCode = `Cli-${String(nextNumber).padStart(3, '0')}`;
-
-		// Salva o cliente
+	// Referência para coleção de clientes do usuário
+	const clientsRef = admin.firestore().collection('Usuarios').doc(uid).collection('Clientes');
+	
+	// Busca todos os clientes para encontrar o maior código existente
+	const snapshot = await clientsRef.get();
+	
+	let maxNumber = 0;
+	snapshot.forEach(doc => {
+		const codigo = doc.data().codigo || doc.id;
+		// Extrai o número do código (Cli-002 -> 2)
+		const match = codigo.match(/Cli-(\d+)/);
+		if (match) {
+			const num = parseInt(match[1], 10);
+			if (num > maxNumber) {
+				maxNumber = num;
+			}
+		}
+	});
+	
+	// Incrementa o maior número encontrado
+	const nextNumber = maxNumber + 1;
+	const clientCode = `Cli-${String(nextNumber).padStart(3, '0')}`;		// Salva o cliente
 		await clientsRef.doc(clientCode).set({
 			codigo: clientCode,
 			...sanitizedData,
