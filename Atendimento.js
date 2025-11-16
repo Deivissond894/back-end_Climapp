@@ -184,7 +184,38 @@ router.get('/:uid', async (req, res) => {
 		}
 
 		const atendimentos = [];
-		snapshot.forEach(doc => atendimentos.push({ id: doc.id, ...doc.data() }));
+		
+		// Para cada atendimento, buscar dados do cliente (rua e numero)
+		for (const doc of snapshot.docs) {
+			const atendimentoData = { id: doc.id, ...doc.data() };
+			
+			// Se existe clienteCodigo, buscar dados do cliente
+			if (atendimentoData.clienteCodigo) {
+				try {
+					const clienteRef = admin.firestore()
+						.collection('Usuarios')
+						.doc(uid)
+						.collection('Clientes')
+						.doc(atendimentoData.clienteCodigo);
+					
+					const clienteDoc = await clienteRef.get();
+					
+					if (clienteDoc.exists) {
+						const clienteData = clienteDoc.data();
+						// Adicionar apenas rua e numero
+						atendimentoData.rua = clienteData.rua || "";
+						atendimentoData.numero = clienteData.numero || "";
+					}
+				} catch (clientError) {
+					console.warn(`⚠️ Erro ao buscar cliente ${atendimentoData.clienteCodigo}:`, clientError.message);
+					// Se der erro, deixa os campos vazios
+					atendimentoData.rua = "";
+					atendimentoData.numero = "";
+				}
+			}
+			
+			atendimentos.push(atendimentoData);
+		}
 
 		return res.status(200).json({ 
 			success: true, 
