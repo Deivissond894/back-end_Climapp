@@ -12,6 +12,7 @@ const {
 } = require('./validation');
 const clientRoutes = require('./Client');
 const aiRoutes = require('./AI');
+const atendimentoRoutes = require('./Atendimento');
 
 const app = express();
 const PORT = process.env.PORT || 10000; // Render usa porta 10000 por padrão
@@ -44,6 +45,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/clientes', clientRoutes);
 app.use('/ai', aiRoutes);
+app.use('/atendimentos', atendimentoRoutes);
 
 // Middleware de tratamento de erros
 const errorHandler = (err, req, res, next) => {
@@ -76,6 +78,13 @@ app.get('/', (req, res) => {
         list: `${BASE_URL}/clientes/:uid`,
         update: `${BASE_URL}/clientes/:uid/:clientId`,
         delete: `${BASE_URL}/clientes/:uid/:clientId`
+      },
+      atendimentos: {
+        create: `${BASE_URL}/atendimentos`,
+        list: `${BASE_URL}/atendimentos/:uid`,
+        get: `${BASE_URL}/atendimentos/:uid/:atendimentoId`,
+        update: `${BASE_URL}/atendimentos/:uid/:atendimentoId`,
+        delete: `${BASE_URL}/atendimentos/:uid/:atendimentoId`
       },
       ai: {
         processAudio: `${BASE_URL}/ai/process-audio`,
@@ -393,6 +402,12 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   GET ${BASE_URL}/clientes/:uid - Listar clientes`);
   console.log(`   PUT ${BASE_URL}/clientes/:uid/:clientId - Atualizar cliente`);
   console.log(`   DELETE ${BASE_URL}/clientes/:uid/:clientId - Excluir cliente`);
+  console.log(`📋 Endpoints de atendimentos disponíveis:`);
+  console.log(`   POST ${BASE_URL}/atendimentos - Criar atendimento`);
+  console.log(`   GET ${BASE_URL}/atendimentos/:uid - Listar atendimentos`);
+  console.log(`   GET ${BASE_URL}/atendimentos/:uid/:atendimentoId - Buscar atendimento`);
+  console.log(`   PUT ${BASE_URL}/atendimentos/:uid/:atendimentoId - Atualizar atendimento`);
+  console.log(`   DELETE ${BASE_URL}/atendimentos/:uid/:atendimentoId - Excluir atendimento`);
   console.log(`🤖 Endpoints de IA disponíveis:`);
   console.log(`   POST ${BASE_URL}/ai/process-audio - Processar áudio com IA`);
   console.log(`   GET ${BASE_URL}/ai/status - Status do serviço de IA`);

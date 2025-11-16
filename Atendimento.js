@@ -1,0 +1,338 @@
+const express = require('express');
+const router = express.Router();
+const { admin } = require('./firebase-config');
+
+// Função utilitária para garantir campos obrigatórios
+function sanitizeAtendimentoData(data) {
+	return {
+		Produto: data.Produto || "",
+		clienteCodigo: data.clienteCodigo || "",
+		clienteNome: data.clienteNome || "",
+		data: data.data || "",
+		descricaoDefeito: data.descricaoDefeito || "",
+		foto: data.foto || null,
+		hora: data.hora || "",
+		modelo: data.modelo || "",
+		valorVisita: data.valorVisita || ""
+	};
+}
+
+// Endpoint para criar novo atendimento
+// POST /atendimentos
+router.post('/', async (req, res) => {
+	try {
+		const { uid, ...atendimentoData } = req.body;
+		
+		if (!uid) {
+			return res.status(400).json({ 
+				success: false, 
+				message: 'UID do usuário não informado.' 
+			});
+		}
+
+		// Sanitiza os dados recebidos
+		const sanitizedData = sanitizeAtendimentoData(atendimentoData);
+
+		// Referência para coleção de atendimentos do usuário
+		const atendimentosRef = admin.firestore()
+			.collection('Usuarios')
+			.doc(uid)
+			.collection('Atendimentos');
+		
+		// Busca todos os atendimentos para encontrar o maior código existente
+		const snapshot = await atendimentosRef.get();
+		
+		let maxNumber = 0;
+		snapshot.forEach(doc => {
+			const codigo = doc.data().codigo || doc.id;
+			// Extrai o número do código (Atend-002 -> 2)
+			const match = codigo.match(/Atend-(\d+)/);
+			if (match) {
+				const num = parseInt(match[1], 10);
+				if (num > maxNumber) {
+					maxNumber = num;
+				}
+			}
+		});
+		
+		// Incrementa o maior número encontrado
+		const nextNumber = maxNumber + 1;
+		const atendimentoCode = `Atend-${String(nextNumber).padStart(2, '0')}`;
+
+		// Salva o atendimento
+		await atendimentosRef.doc(atendimentoCode).set({
+			codigo: atendimentoCode,
+			...sanitizedData,
+			criadoEm: admin.firestore.FieldValue.serverTimestamp(),
+			status: 'em_andamento' // Status inicial do atendimento
+		});
+
+		// Log para auditoria
+		console.log(`✅ Atendimento criado:`, {
+			uid: uid,
+			codigo: atendimentoCode,
+			cliente: sanitizedData.clienteNome,
+			produto: sanitizedData.Produto,
+			criadoEm: new Date().toISOString()
+		});
+
+		return res.status(201).json({ 
+			success: true, 
+			message: 'Atendimento iniciado com sucesso!', 
+			codigo: atendimentoCode,
+			data: {
+				codigo: atendimentoCode,
+				...sanitizedData
+			}
+		});
+
+	} catch (error) {
+		console.error('❌ Erro ao criar atendimento:', {
+			error: error.message,
+			timestamp: new Date().toISOString()
+		});
+
+		return res.status(500).json({ 
+			success: false, 
+			message: 'Erro ao iniciar atendimento.', 
+			error: error.message 
+		});
+	}
+});
+
+// Endpoint para listar atendimentos do usuário
+// GET /atendimentos/:uid
+router.get('/:uid', async (req, res) => {
+	try {
+		const uid = req.params.uid;
+		
+		if (!uid) {
+			return res.status(400).json({ 
+				success: false, 
+				message: 'UID não informado.' 
+			});
+		}
+
+		const atendimentosRef = admin.firestore()
+			.collection('Usuarios')
+			.doc(uid)
+			.collection('Atendimentos');
+
+		// Tenta ordenar por criadoEm, mas faz fallback caso campo não exista
+		let snapshot;
+		try {
+			snapshot = await atendimentosRef.orderBy('criadoEm', 'desc').get();
+		} catch (err) {
+			snapshot = await atendimentosRef.get();
+		}
+
+		const atendimentos = [];
+		snapshot.forEach(doc => atendimentos.push({ id: doc.id, ...doc.data() }));
+
+		return res.status(200).json({ 
+			success: true, 
+			count: atendimentos.length, 
+			data: atendimentos 
+		});
+
+	} catch (error) {
+		console.error('❌ Erro ao buscar atendimentos:', {
+			error: error.message,
+			timestamp: new Date().toISOString()
+		});
+
+		return res.status(500).json({ 
+			success: false, 
+			message: 'Erro ao buscar atendimentos.', 
+			error: error.message 
+		});
+	}
+});
+
+// Endpoint para buscar um atendimento específico
+// GET /atendimentos/:uid/:atendimentoId
+router.get('/:uid/:atendimentoId', async (req, res) => {
+	try {
+		const { uid, atendimentoId } = req.params;
+		
+		if (!uid || !atendimentoId) {
+			return res.status(400).json({ 
+				success: false, 
+				message: 'UID ou código do atendimento não informado.' 
+			});
+		}
+
+		const atendimentoRef = admin.firestore()
+			.collection('Usuarios')
+			.doc(uid)
+			.collection('Atendimentos')
+			.doc(atendimentoId);
+
+		const doc = await atendimentoRef.get();
+		
+		if (!doc.exists) {
+			return res.status(404).json({
+				success: false,
+				message: `Atendimento '${atendimentoId}' não encontrado.`
+			});
+		}
+
+		return res.status(200).json({
+			success: true,
+			data: { id: doc.id, ...doc.data() }
+		});
+
+	} catch (error) {
+		console.error('❌ Erro ao buscar atendimento:', {
+			error: error.message,
+			timestamp: new Date().toISOString()
+		});
+
+		return res.status(500).json({ 
+			success: false, 
+			message: 'Erro ao buscar atendimento.', 
+			error: error.message 
+		});
+	}
+});
+
+// Endpoint para atualizar atendimento
+// PUT /atendimentos/:uid/:atendimentoId
+router.put('/:uid/:atendimentoId', async (req, res) => {
+	try {
+		const { uid, atendimentoId } = req.params;
+		const updateData = req.body;
+		
+		if (!uid || !atendimentoId) {
+			return res.status(400).json({ 
+				success: false, 
+				message: 'UID ou código do atendimento não informado.' 
+			});
+		}
+
+		if (!updateData || Object.keys(updateData).length === 0) {
+			return res.status(400).json({
+				success: false,
+				message: 'Nenhum dado fornecido para atualização.'
+			});
+		}
+
+		const atendimentoRef = admin.firestore()
+			.collection('Usuarios')
+			.doc(uid)
+			.collection('Atendimentos')
+			.doc(atendimentoId);
+
+		const doc = await atendimentoRef.get();
+		
+		if (!doc.exists) {
+			return res.status(404).json({
+				success: false,
+				message: `Atendimento '${atendimentoId}' não encontrado.`
+			});
+		}
+
+		const currentData = doc.data();
+
+		// Prepara dados para atualização
+		const finalUpdateData = {
+			...updateData,
+			codigo: atendimentoId, // Manter o código original
+			criadoEm: currentData.criadoEm, // Manter data de criação
+			atualizadoEm: admin.firestore.FieldValue.serverTimestamp()
+		};
+
+		await atendimentoRef.update(finalUpdateData);
+
+		const updatedDoc = await atendimentoRef.get();
+		const updatedData = updatedDoc.data();
+
+		console.log(`📝 Atendimento atualizado:`, {
+			uid: uid,
+			codigo: atendimentoId,
+			updatedAt: new Date().toISOString()
+		});
+
+		return res.status(200).json({
+			success: true,
+			message: `Atendimento '${atendimentoId}' atualizado com sucesso.`,
+			data: updatedData
+		});
+
+	} catch (error) {
+		console.error('❌ Erro ao atualizar atendimento:', {
+			error: error.message,
+			timestamp: new Date().toISOString()
+		});
+
+		return res.status(500).json({
+			success: false,
+			message: 'Erro ao atualizar atendimento.',
+			error: error.message
+		});
+	}
+});
+
+// Endpoint para excluir atendimento
+// DELETE /atendimentos/:uid/:atendimentoId
+router.delete('/:uid/:atendimentoId', async (req, res) => {
+	try {
+		const { uid, atendimentoId } = req.params;
+		
+		if (!uid || !atendimentoId) {
+			return res.status(400).json({ 
+				success: false, 
+				message: 'UID ou código do atendimento não informado.' 
+			});
+		}
+
+		const atendimentoRef = admin.firestore()
+			.collection('Usuarios')
+			.doc(uid)
+			.collection('Atendimentos')
+			.doc(atendimentoId);
+
+		const doc = await atendimentoRef.get();
+		
+		if (!doc.exists) {
+			return res.status(404).json({
+				success: false,
+				message: `Atendimento '${atendimentoId}' não encontrado.`
+			});
+		}
+
+		const atendimentoData = doc.data();
+
+		await atendimentoRef.delete();
+
+		console.log(`🗑️ Atendimento excluído:`, {
+			uid: uid,
+			codigo: atendimentoId,
+			cliente: atendimentoData.clienteNome,
+			deletedAt: new Date().toISOString()
+		});
+
+		return res.status(200).json({
+			success: true,
+			message: `Atendimento '${atendimentoId}' excluído com sucesso.`,
+			data: {
+				codigo: atendimentoId,
+				deletedAt: new Date().toISOString()
+			}
+		});
+
+	} catch (error) {
+		console.error('❌ Erro ao excluir atendimento:', {
+			error: error.message,
+			timestamp: new Date().toISOString()
+		});
+
+		return res.status(500).json({
+			success: false,
+			message: 'Erro ao excluir atendimento.',
+			error: error.message
+		});
+	}
+});
+
+module.exports = router;
