@@ -2,6 +2,33 @@ const express = require('express');
 const router = express.Router();
 const { admin } = require('./firebase-config');
 
+// Estágios válidos para o status do atendimento
+const ESTAGIOS_VALIDOS = [
+	'Diagnóstico',
+	'Aguardando',
+	'Aprovado',
+	'Recusado',
+	'Executado',
+	'Garantia'
+];
+
+// Função para validar e normalizar o status
+function normalizarStatus(status) {
+	// Se status for null, undefined ou vazio, retorna "Diagnóstico"
+	if (!status || status.trim() === '') {
+		return 'Diagnóstico';
+	}
+	
+	// Verifica se o status está na lista de estágios válidos
+	if (ESTAGIOS_VALIDOS.includes(status)) {
+		return status;
+	}
+	
+	// Se não for válido, retorna "Diagnóstico" como padrão
+	console.warn(`⚠️ Status inválido recebido: "${status}". Usando "Diagnóstico" como padrão.`);
+	return 'Diagnóstico';
+}
+
 // Função utilitária para garantir campos obrigatórios
 function sanitizeAtendimentoData(data) {
 	return {
@@ -13,7 +40,8 @@ function sanitizeAtendimentoData(data) {
 		foto: data.foto || null,
 		hora: data.hora || "",
 		modelo: data.modelo || "",
-		valorVisita: data.valorVisita || ""
+		valorVisita: data.valorVisita || "",
+		Status: normalizarStatus(data.Status) // Normaliza o status
 	};
 }
 
@@ -63,8 +91,7 @@ router.post('/', async (req, res) => {
 		await atendimentosRef.doc(atendimentoCode).set({
 			codigo: atendimentoCode,
 			...sanitizedData,
-			criadoEm: admin.firestore.FieldValue.serverTimestamp(),
-			status: 'em_andamento' // Status inicial do atendimento
+			criadoEm: admin.firestore.FieldValue.serverTimestamp()
 		});
 
 		// Log para auditoria
@@ -73,6 +100,7 @@ router.post('/', async (req, res) => {
 			codigo: atendimentoCode,
 			cliente: sanitizedData.clienteNome,
 			produto: sanitizedData.Produto,
+			status: sanitizedData.Status,
 			criadoEm: new Date().toISOString()
 		});
 
@@ -96,6 +124,35 @@ router.post('/', async (req, res) => {
 			success: false, 
 			message: 'Erro ao iniciar atendimento.', 
 			error: error.message 
+		});
+	}
+});
+
+// Endpoint para listar os estágios válidos de status
+// GET /atendimentos/estagios
+router.get('/estagios/lista', async (req, res) => {
+	try {
+		return res.status(200).json({
+			success: true,
+			message: 'Lista de estágios válidos para atendimento',
+			data: {
+				estagios: ESTAGIOS_VALIDOS,
+				padrao: 'Diagnóstico',
+				descricao: {
+					'Diagnóstico': 'Atendimento em fase de diagnóstico inicial',
+					'Aguardando': 'Aguardando aprovação ou peças',
+					'Aprovado': 'Serviço aprovado pelo cliente',
+					'Recusado': 'Serviço recusado pelo cliente',
+					'Executado': 'Serviço executado e finalizado',
+					'Garantia': 'Atendimento em garantia'
+				}
+			}
+		});
+	} catch (error) {
+		return res.status(500).json({
+			success: false,
+			message: 'Erro ao buscar estágios',
+			error: error.message
 		});
 	}
 });
