@@ -33,6 +33,7 @@ async function processAudioWithGemini(audioData, audioFormat = 'wav') {
 
 **FORMATO DE SAÍDA (JSON):**
 {
+  "transcricao": "texto completo transcrito do áudio",
   "pecas_materiais": [
     {
       "material1": "nome EXATO mencionado",
@@ -51,6 +52,7 @@ async function processAudioWithGemini(audioData, audioFormat = 'wav') {
 **EXEMPLO DE SAÍDA:**
 Para o áudio: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e fazer limpeza do sistema com gás R-410A", retorne:
 {
+  "transcricao": "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e fazer limpeza do sistema com gás R-410A",
   "pecas_materiais": [
     {
       "material1": "compressor Embraco EGX120",
@@ -82,6 +84,7 @@ Para o áudio: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e 
 **INSTRUÇÕES PARA ÁUDIOS SEM INFORMAÇÕES CLARAS:**
 - Se nenhum item atingir confiança ≥ 80%, retorne:
 {
+  "transcricao": "texto transcrito mesmo sem informações claras",
   "pecas_materiais": [],
   "servicos": []
 }
@@ -187,6 +190,7 @@ Para o áudio: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e 
 
 		// Adicionar metadados
 		const enrichedResponse = {
+			transcricao: parsedResponse.transcricao || '',
 			pecas_materiais: parsedResponse.pecas_materiais,
 			servicos: parsedResponse.servicos,
 			metadata: {
@@ -278,6 +282,7 @@ router.post('/process-audio', async (req, res) => {
 			success: true,
 			message: 'Áudio processado com sucesso',
 			data: {
+				transcricao: processedData.transcricao,
 				pecas_materiais: processedData.pecas_materiais,
 				servicos: processedData.servicos,
 				metadata: processedData.metadata
