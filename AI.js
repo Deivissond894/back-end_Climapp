@@ -20,18 +20,18 @@ async function processAudioWithVoxtral(audioData, audioFormat = 'wav') {
 		}
 
 	// Prompt especializado para extrair informações técnicas de manutenção
-	const systemPrompt = `Você é um transcritor técnico especializado em extrair informações EXATAS de áudios de técnicos.
+	const systemPrompt = `Você é um transcritor técnico especializado em extrair informações LITERAIS e EXATAS de áudios de técnicos de refrigeração, ar-condicionado ou manutenção industrial.
 
-REGRAS FUNDAMENTAIS:
-1. Extraia LITERALMENTE APENAS as palavras mencionadas no áudio - NÃO INTERPRETE, NÃO TRADUZA, NÃO SUBSTITUA, NÃO INVENTE
-2. Se o técnico diz "compressor", você escreve "compressor" - NUNCA "condensador" ou outro termo
-3. Mantenha a EXATA nomenclatura falada, incluindo marcas, modelos e termos coloquiais
-4. Para cada item extraído, você DEVE incluir um score de confiança (0-100)
-5. APENAS inclua itens com confiança >= 80%
-6. Se não tiver certeza absoluta do que foi dito, NÃO inclua no resultado
-7. SE NÃO FOI MENCIONADO NO ÁUDIO, NÃO INCLUA - arrays vazios são aceitáveis e preferíveis a dados inventados
+**REGRAS ABSOLUTAS (NÃO NEGOCIÁVEIS):**
+1. Extraia APENAS as palavras exatas mencionadas no áudio.
+2. Se o técnico diz "compressor Danfoss XYZ", retorne EXATAMENTE "compressor Danfoss XYZ" — NUNCA substitua por sinônimos ou interpretações.
+3. Inclua APENAS itens com confiança ≥ 80% (use sua métrica interna de reconhecimento de fala).
+4. Quantidades devem ser registradas como string (ex: "2") ou "null" se não mencionadas.
+5. Use chaves incrementais no JSON: "material1", "material2", "servico1", "servico2", etc.
+6. Se NADA for mencionado com clareza ≥ 80%, retorne arrays vazios: [].
+7. NUNCA adicione informações não ditas no áudio.
 
-Formato de resposta esperado (JSON):
+**FORMATO DE SAÍDA (JSON):**
 {
   "pecas_materiais": [
     {
@@ -48,20 +48,50 @@ Formato de resposta esperado (JSON):
   ]
 }
 
-INSTRUÇÕES CRÍTICAS:
-- Use "material1", "material2", "material3" como chaves (incremental)
-- Use "servico1", "servico2", "servico3" como chaves (incremental)
-- Se confiança < 80%, NÃO INCLUA o item
-- Se NADA for mencionado, retorne arrays vazios
-- NÃO adicione texto explicativo, APENAS o JSON
-- Quantidade sempre como string ou null
-- Confiança sempre como número inteiro (0-100)
-- NÃO use os exemplos como template - extraia APENAS o que ouvir no áudio
+**EXEMPLO DE SAÍDA:**
+Para o áudio: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e fazer limpeza do sistema com gás R-410A", retorne:
+{
+  "pecas_materiais": [
+    {
+      "material1": "compressor Embraco EGX120",
+      "quantidade": "1",
+      "confianca": 100
+    },
+    {
+      "material2": "capacitores de 40µF",
+      "quantidade": "2",
+      "confianca": 98
+    }
+  ],
+  "servicos": [
+    {
+      "servico1": "troca do compressor",
+      "confianca": 100
+    },
+    {
+      "servico2": "limpeza do sistema",
+      "confianca": 95
+    },
+    {
+      "servico3": "troca do gás R-410A",
+      "confianca": 90
+    }
+  ]
+}
 
-CRÍTICO: Os exemplos abaixo são APENAS para mostrar o formato, NÃO copie os valores!
-❌ NÃO retorne "compressor" se não foi dito "compressor"
-❌ NÃO retorne "gás R22" se não foi dito "gás R22"
-✅ Retorne [] se nada foi dito com clareza >= 80%`;		console.log('🤖 Enviando áudio para processamento com Voxtral...');
+**INSTRUÇÕES PARA ÁUDIOS SEM INFORMAÇÕES CLARAS:**
+- Se nenhum item atingir confiança ≥ 80%, retorne:
+{
+  "pecas_materiais": [],
+  "servicos": []
+}
+
+**PROIBIÇÕES:**
+- ❌ Não interprete termos (ex: "gás" ≠ "refrigerante").
+- ❌ Não complete informações ausentes.
+- ❌ Não use sinônimos ou padronizações.
+
+**DICA:** Áudios devem ser claros, sem ruídos, para maximizar a precisão.`;		console.log('🤖 Enviando áudio para processamento com Voxtral...');
 
 		const response = await axios.post(
 			'https://openrouter.ai/api/v1/chat/completions',
