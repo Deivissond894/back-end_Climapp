@@ -23,35 +23,27 @@ async function processAudioWithVoxtral(audioData, audioFormat = 'wav') {
 	const systemPrompt = `Você é um transcritor técnico especializado em extrair informações EXATAS de áudios de técnicos.
 
 REGRAS FUNDAMENTAIS:
-1. Extraia LITERALMENTE as palavras mencionadas no áudio - NÃO INTERPRETE, NÃO TRADUZA, NÃO SUBSTITUA
+1. Extraia LITERALMENTE APENAS as palavras mencionadas no áudio - NÃO INTERPRETE, NÃO TRADUZA, NÃO SUBSTITUA, NÃO INVENTE
 2. Se o técnico diz "compressor", você escreve "compressor" - NUNCA "condensador" ou outro termo
 3. Mantenha a EXATA nomenclatura falada, incluindo marcas, modelos e termos coloquiais
 4. Para cada item extraído, você DEVE incluir um score de confiança (0-100)
 5. APENAS inclua itens com confiança >= 80%
 6. Se não tiver certeza absoluta do que foi dito, NÃO inclua no resultado
+7. SE NÃO FOI MENCIONADO NO ÁUDIO, NÃO INCLUA - arrays vazios são aceitáveis e preferíveis a dados inventados
 
 Formato de resposta esperado (JSON):
 {
   "pecas_materiais": [
     {
-      "material1": "nome EXATO mencionado no áudio (literal)",
-      "quantidade": "número ou null se não mencionado",
+      "material1": "nome EXATO mencionado",
+      "quantidade": "número ou null",
       "confianca": 95
-    },
-    {
-      "material2": "nome EXATO mencionado no áudio (literal)",
-      "quantidade": "número ou null se não mencionado",
-      "confianca": 88
     }
   ],
   "servicos": [
     {
-      "servico1": "descrição EXATA do serviço mencionado",
+      "servico1": "descrição EXATA mencionada",
       "confianca": 92
-    },
-    {
-      "servico2": "descrição EXATA do serviço mencionado",
-      "confianca": 85
     }
   ]
 }
@@ -60,21 +52,16 @@ INSTRUÇÕES CRÍTICAS:
 - Use "material1", "material2", "material3" como chaves (incremental)
 - Use "servico1", "servico2", "servico3" como chaves (incremental)
 - Se confiança < 80%, NÃO INCLUA o item
-- Se nenhuma peça for mencionada com confiança >= 80%, retorne "pecas_materiais": []
-- Se nenhum serviço for mencionado com confiança >= 80%, retorne "servicos": []
+- Se NADA for mencionado, retorne arrays vazios
 - NÃO adicione texto explicativo, APENAS o JSON
 - Quantidade sempre como string ou null
 - Confiança sempre como número inteiro (0-100)
+- NÃO use os exemplos como template - extraia APENAS o que ouvir no áudio
 
-EXEMPLOS DO QUE NÃO FAZER:
-❌ Áudio diz "compressor" → Você escreve "condensador" (ERRADO!)
-❌ Áudio diz "gás R22" → Você escreve "fluido refrigerante" (ERRADO!)
-❌ Incluir item com confiança 75% (ERRADO!)
-
-EXEMPLOS DO QUE FAZER:
-✅ Áudio diz "compressor" → Você escreve "compressor"
-✅ Áudio diz "gás R22" → Você escreve "gás R22"
-✅ Apenas itens com confiança >= 80%`;		console.log('🤖 Enviando áudio para processamento com Voxtral...');
+CRÍTICO: Os exemplos abaixo são APENAS para mostrar o formato, NÃO copie os valores!
+❌ NÃO retorne "compressor" se não foi dito "compressor"
+❌ NÃO retorne "gás R22" se não foi dito "gás R22"
+✅ Retorne [] se nada foi dito com clareza >= 80%`;		console.log('🤖 Enviando áudio para processamento com Voxtral...');
 
 		const response = await axios.post(
 			'https://openrouter.ai/api/v1/chat/completions',
