@@ -4,12 +4,12 @@ const axios = require('axios');
 require('dotenv').config();
 
 /**
- * Função para processar áudio com IA usando Voxtral (Mistral AI)
+ * Função para processar áudio com IA usando Gemini 2.5 Flash Lite
  * @param {string} audioData - Áudio em formato base64
  * @param {string} audioFormat - Formato do áudio (wav, mp3, etc.)
  * @returns {Promise<Object>} - Objeto com dados estruturados extraídos do áudio
  */
-async function processAudioWithVoxtral(audioData, audioFormat = 'wav') {
+async function processAudioWithGemini(audioData, audioFormat = 'wav') {
 	try {
 		const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 		const SITE_URL = process.env.SITE_URL || 'https://climapp-1hxc.onrender.com';
@@ -19,22 +19,84 @@ async function processAudioWithVoxtral(audioData, audioFormat = 'wav') {
 			throw new Error('OPENROUTER_API_KEY não configurada no .env');
 		}
 
-	// Prompt especializado para transcrição de áudio
-	const systemPrompt = `Você é um transcritor de áudio especializado. Transcreva EXATAMENTE o que foi dito no áudio, palavra por palavra.
+	// Prompt especializado para extrair informações técnicas de manutenção
+	const systemPrompt = `Você é um transcritor técnico especializado em extrair informações LITERAIS e EXATAS de áudios de técnicos de refrigeração, ar-condicionado ou manutenção industrial.
 
-**INSTRUÇÕES:**
-1. Retorne APENAS a transcrição literal do áudio.
-2. Não adicione, interprete ou modifique nada.
-3. Mantenha a pontuação natural da fala.
-4. Se não entender alguma parte, use [inaudível].
+**REGRAS ABSOLUTAS (NÃO NEGOCIÁVEIS):**
+1. Extraia APENAS as palavras exatas mencionadas no áudio.
+2. Se o técnico diz "compressor Danfoss XYZ", retorne EXATAMENTE "compressor Danfoss XYZ" — NUNCA substitua por sinônimos ou interpretações.
+3. Inclua APENAS itens com confiança ≥ 80% (use sua métrica interna de reconhecimento de fala).
+4. Quantidades devem ser registradas como string (ex: "2") ou "null" se não mencionadas.
+5. Use chaves incrementais no JSON: "material1", "material2", "servico1", "servico2", etc.
+6. Se NADA for mencionado com clareza ≥ 80%, retorne arrays vazios: [].
+7. NUNCA adicione informações não ditas no áudio.
 
-**FORMATO DE SAÍDA:**
-Retorne apenas o texto transcrito, sem formatação adicional.`;		console.log('🤖 Enviando áudio para processamento com Voxtral...');
+**FORMATO DE SAÍDA (JSON):**
+{
+  "pecas_materiais": [
+    {
+      "material1": "nome EXATO mencionado",
+      "quantidade": "número ou null",
+      "confianca": 95
+    }
+  ],
+  "servicos": [
+    {
+      "servico1": "descrição EXATA mencionada",
+      "confianca": 92
+    }
+  ]
+}
+
+**EXEMPLO DE SAÍDA:**
+Para o áudio: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e fazer limpeza do sistema com gás R-410A", retorne:
+{
+  "pecas_materiais": [
+    {
+      "material1": "compressor Embraco EGX120",
+      "quantidade": "1",
+      "confianca": 100
+    },
+    {
+      "material2": "capacitores de 40µF",
+      "quantidade": "2",
+      "confianca": 98
+    }
+  ],
+  "servicos": [
+    {
+      "servico1": "troca do compressor",
+      "confianca": 100
+    },
+    {
+      "servico2": "limpeza do sistema",
+      "confianca": 95
+    },
+    {
+      "servico3": "troca do gás R-410A",
+      "confianca": 90
+    }
+  ]
+}
+
+**INSTRUÇÕES PARA ÁUDIOS SEM INFORMAÇÕES CLARAS:**
+- Se nenhum item atingir confiança ≥ 80%, retorne:
+{
+  "pecas_materiais": [],
+  "servicos": []
+}
+
+**PROIBIÇÕES:**
+- ❌ Não interprete termos (ex: "gás" ≠ "refrigerante").
+- ❌ Não complete informações ausentes.
+- ❌ Não use sinônimos ou padronizações.
+
+**DICA:** Áudios devem ser claros, sem ruídos, para maximizar a precisão.`;		console.log('🤖 Enviando áudio para processamento com Gemini 2.5 Flash Lite...');
 
 		const response = await axios.post(
 			'https://openrouter.ai/api/v1/chat/completions',
 			{
-				model: 'mistralai/voxtral-small-24b-2507',
+				model: 'google/gemini-2.5-flash-lite-preview-09-2025',
 				messages: [
 					{
 						role: 'system',
@@ -45,7 +107,7 @@ Retorne apenas o texto transcrito, sem formatação adicional.`;		console.log('�
 						content: [
 							{
 								type: 'text',
-								text: 'Transcreva este áudio:'
+								text: 'Analise este áudio de relatório técnico e extraia as informações conforme o formato solicitado:'
 							},
 							{
 								type: 'input_audio',
@@ -59,10 +121,7 @@ Retorne apenas o texto transcrito, sem formatação adicional.`;		console.log('�
 				],
 				temperature: 0.3,
 				max_tokens: 2000,
-				// Desabilita cache para evitar respostas repetidas
-				headers: {
-					'anthropic-cache-control': 'no-cache'
-				}
+				response_format: { type: 'json_object' }
 			},
 			{
 				headers: {
@@ -77,22 +136,74 @@ Retorne apenas o texto transcrito, sem formatação adicional.`;		console.log('�
 
 		console.log('✅ Resposta recebida da API OpenRouter');
 
-		// Extrair a transcrição
-		const transcricao = response.data.choices[0].message.content;
+		// Extrair a resposta da IA
+		const aiResponse = response.data.choices[0].message.content;
+		
+		// Parse do JSON retornado
+		let parsedResponse;
+		try {
+			parsedResponse = JSON.parse(aiResponse);
+		} catch (parseError) {
+			console.error('❌ Erro ao fazer parse da resposta JSON:', parseError);
+			// Tentar extrair JSON da resposta se estiver envolvido em texto
+			const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+			if (jsonMatch) {
+				parsedResponse = JSON.parse(jsonMatch[0]);
+			} else {
+				throw new Error('Resposta da IA não está em formato JSON válido');
+			}
+		}
 
-		// Retornar apenas a transcrição
-		return {
-			transcricao: transcricao.trim(),
+		// FILTRAR ITENS COM BAIXA CONFIANÇA (< 80%)
+		const CONFIANCA_MINIMA = 80;
+		
+		// Filtrar peças/materiais
+		if (parsedResponse.pecas_materiais && Array.isArray(parsedResponse.pecas_materiais)) {
+			parsedResponse.pecas_materiais = parsedResponse.pecas_materiais.filter(item => {
+				const confianca = item.confianca || 0;
+				if (confianca < CONFIANCA_MINIMA) {
+					console.log(`⚠️ Material removido por baixa confiança (${confianca}%):`, item);
+					return false;
+				}
+				return true;
+			});
+		} else {
+			parsedResponse.pecas_materiais = [];
+		}
+
+		// Filtrar serviços
+		if (parsedResponse.servicos && Array.isArray(parsedResponse.servicos)) {
+			parsedResponse.servicos = parsedResponse.servicos.filter(item => {
+				const confianca = item.confianca || 0;
+				if (confianca < CONFIANCA_MINIMA) {
+					console.log(`⚠️ Serviço removido por baixa confiança (${confianca}%):`, item);
+					return false;
+				}
+				return true;
+			});
+		} else {
+			parsedResponse.servicos = [];
+		}
+
+		// Adicionar metadados
+		const enrichedResponse = {
+			pecas_materiais: parsedResponse.pecas_materiais,
+			servicos: parsedResponse.servicos,
 			metadata: {
-				modelo_ia: 'mistralai/voxtral-small-24b-2507',
+				modelo_ia: 'google/gemini-2.5-flash-lite-preview-09-2025',
 				processado_em: new Date().toISOString(),
 				formato_audio: audioFormat,
-				tokens_utilizados: response.data.usage || null
+				confianca_minima: CONFIANCA_MINIMA,
+				tokens_utilizados: response.data.usage || null,
+				total_pecas: parsedResponse.pecas_materiais.length,
+				total_servicos: parsedResponse.servicos.length
 			}
 		};
 
+		return enrichedResponse;
+
 	} catch (error) {
-		console.error('❌ Erro ao processar áudio com Voxtral:', {
+		console.error('❌ Erro ao processar áudio com Gemini:', {
 			message: error.message,
 			response: error.response?.data,
 			status: error.response?.status
@@ -153,17 +264,22 @@ router.post('/process-audio', async (req, res) => {
 		if (clientId) console.log(`👥 ID do cliente: ${clientId}`);
 
 		// Processar áudio com IA
-		const processedData = await processAudioWithVoxtral(audioData, audioFormat);
+		const processedData = await processAudioWithGemini(audioData, audioFormat);
 
 		// Log de sucesso
-		console.log('✅ Áudio processado com sucesso');
+		console.log('✅ Áudio processado com sucesso:', {
+			pecas_count: processedData.pecas_materiais?.length || 0,
+			servicos_count: processedData.servicos?.length || 0,
+			confianca_minima: processedData.metadata?.confianca_minima || 80
+		});
 
 		// Retornar resposta estruturada
 		return res.status(200).json({
 			success: true,
 			message: 'Áudio processado com sucesso',
 			data: {
-				transcricao: processedData.transcricao,
+				pecas_materiais: processedData.pecas_materiais,
+				servicos: processedData.servicos,
 				metadata: processedData.metadata
 			}
 		});
@@ -208,7 +324,7 @@ router.get('/status', (req, res) => {
 		message: 'Status do serviço de IA',
 		data: {
 			api_configured: isConfigured,
-			model: 'mistralai/voxtral-small-24b-2507',
+			model: 'google/gemini-2.5-flash-lite-preview-09-2025',
 			supported_formats: ['wav', 'mp3', 'ogg', 'webm', 'flac'],
 			endpoint: '/ai/process-audio',
 			status: isConfigured ? 'ready' : 'not_configured',
