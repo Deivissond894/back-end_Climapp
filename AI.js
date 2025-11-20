@@ -4,12 +4,73 @@ const axios = require('axios');
 require('dotenv').config();
 
 /**
- * Função para processar áudio com IA usando Gemini 2.5 Flash Lite
+ * Função para transcrever áudio usando Deepgram
  * @param {string} audioData - Áudio em formato base64
  * @param {string} audioFormat - Formato do áudio (wav, mp3, etc.)
- * @returns {Promise<Object>} - Objeto com dados estruturados extraídos do áudio
+ * @returns {Promise<string>} - Texto transcrito
  */
-async function processAudioWithGemini(audioData, audioFormat = 'wav') {
+async function transcribeWithDeepgram(audioData, audioFormat = 'wav') {
+	try {
+		const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
+
+		if (!DEEPGRAM_API_KEY) {
+			throw new Error('DEEPGRAM_API_KEY não configurada no .env');
+		}
+
+		console.log('🎙️ Enviando áudio para transcrição com Deepgram...');
+
+		// Converter base64 para buffer
+		const audioBuffer = Buffer.from(audioData, 'base64');
+
+		// Mapear formato para MIME type
+		const mimeTypes = {
+			'wav': 'audio/wav',
+			'mp3': 'audio/mp3',
+			'webm': 'audio/webm',
+			'ogg': 'audio/ogg',
+			'flac': 'audio/flac'
+		};
+
+		const response = await axios.post(
+			'https://api.deepgram.com/v1/listen?model=nova-2&language=pt-BR&smart_format=true',
+			audioBuffer,
+			{
+				headers: {
+					'Authorization': `Token ${DEEPGRAM_API_KEY}`,
+					'Content-Type': mimeTypes[audioFormat] || 'audio/wav'
+				},
+				timeout: 60000
+			}
+		);
+
+		const transcricao = response.data.results.channels[0].alternatives[0].transcript;
+		console.log('✅ Transcrição concluída com Deepgram');
+
+		return transcricao;
+
+	} catch (error) {
+		console.error('❌ Erro ao transcrever com Deepgram:', {
+			message: error.message,
+			response: error.response?.data,
+			status: error.response?.status
+		});
+
+		if (error.response?.status === 401) {
+			throw new Error('Chave de API do Deepgram inválida ou não configurada');
+		} else if (error.response?.status === 429) {
+			throw new Error('Limite de requisições do Deepgram excedido');
+		}
+
+		throw error;
+	}
+}
+
+/**
+ * Função para extrair informações do texto usando Gemini
+ * @param {string} transcricao - Texto transcrito
+ * @returns {Promise<Object>} - Objeto com materiais e serviços extraídos
+ */
+async function extractInfoWithGemini(transcricao) {
 	try {
 		const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 		const SITE_URL = process.env.SITE_URL || 'https://climapp-1hxc.onrender.com';
@@ -19,8 +80,8 @@ async function processAudioWithGemini(audioData, audioFormat = 'wav') {
 			throw new Error('OPENROUTER_API_KEY não configurada no .env');
 		}
 
-	// Prompt especializado para extrair informações técnicas de manutenção
-	const systemPrompt = `Você é um transcritor técnico especializado em extrair informações LITERAIS e EXATAS de áudios de técnicos de refrigeração, ar-condicionado ou manutenção industrial.
+	// Prompt especializado para extrair informações de texto transcrito
+	const systemPrompt = `Você é um analisador técnico especializado em extrair informações LITERAIS e EXATAS de textos transcritos de técnicos de refrigeração, ar-condicionado ou manutenção industrial.
 
 **REGRAS ABSOLUTAS (NÃO NEGOCIÁVEIS):**
 1. Extraia APENAS as palavras exatas mencionadas no áudio.
@@ -33,7 +94,6 @@ async function processAudioWithGemini(audioData, audioFormat = 'wav') {
 
 **FORMATO DE SAÍDA (JSON):**
 {
-  "transcricao": "texto completo transcrito do áudio",
   "pecas_materiais": [
     {
       "material1": "nome EXATO mencionado",
@@ -50,9 +110,8 @@ async function processAudioWithGemini(audioData, audioFormat = 'wav') {
 }
 
 **EXEMPLO DE SAÍDA:**
-Para o áudio: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e fazer limpeza do sistema com gás R-410A", retorne:
+Para o texto: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e fazer limpeza do sistema com gás R-410A", retorne:
 {
-  "transcricao": "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e fazer limpeza do sistema com gás R-410A",
   "pecas_materiais": [
     {
       "material1": "compressor Embraco EGX120",
@@ -81,10 +140,9 @@ Para o áudio: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e 
   ]
 }
 
-**INSTRUÇÕES PARA ÁUDIOS SEM INFORMAÇÕES CLARAS:**
+**INSTRUÇÕES PARA TEXTOS SEM INFORMAÇÕES CLARAS:**
 - Se nenhum item atingir confiança ≥ 80%, retorne:
 {
-  "transcricao": "texto transcrito mesmo sem informações claras",
   "pecas_materiais": [],
   "servicos": []
 }
@@ -92,9 +150,9 @@ Para o áudio: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e 
 **PROIBIÇÕES:**
 - ❌ Não interprete termos (ex: "gás" ≠ "refrigerante").
 - ❌ Não complete informações ausentes.
-- ❌ Não use sinônimos ou padronizações.
+- ❌ Não use sinônimos ou padronizações.`;
 
-**DICA:** Áudios devem ser claros, sem ruídos, para maximizar a precisão.`;		console.log('🤖 Enviando áudio para processamento com Gemini 2.5 Flash Lite...');
+		console.log('🤖 Analisando texto com Gemini 2.5 Flash Lite...');
 
 		const response = await axios.post(
 			'https://openrouter.ai/api/v1/chat/completions',
@@ -107,19 +165,7 @@ Para o áudio: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e 
 					},
 					{
 						role: 'user',
-						content: [
-							{
-								type: 'text',
-								text: 'Analise este áudio de relatório técnico e extraia as informações conforme o formato solicitado:'
-							},
-							{
-								type: 'input_audio',
-								input_audio: {
-									data: audioData,
-									format: audioFormat
-								}
-							}
-						]
+						content: `Analise este texto de relatório técnico e extraia as informações conforme o formato solicitado:\n\n"${transcricao}"`
 					}
 				],
 				temperature: 0.3,
@@ -188,26 +234,18 @@ Para o áudio: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e 
 			parsedResponse.servicos = [];
 		}
 
-		// Adicionar metadados
-		const enrichedResponse = {
-			transcricao: parsedResponse.transcricao || '',
+		// Retornar dados extraídos
+		return {
 			pecas_materiais: parsedResponse.pecas_materiais,
 			servicos: parsedResponse.servicos,
-			metadata: {
-				modelo_ia: 'google/gemini-2.5-flash-lite-preview-09-2025',
-				processado_em: new Date().toISOString(),
-				formato_audio: audioFormat,
-				confianca_minima: CONFIANCA_MINIMA,
-				tokens_utilizados: response.data.usage || null,
-				total_pecas: parsedResponse.pecas_materiais.length,
-				total_servicos: parsedResponse.servicos.length
-			}
+			confianca_minima: CONFIANCA_MINIMA,
+			tokens_utilizados: response.data.usage || null,
+			total_pecas: parsedResponse.pecas_materiais.length,
+			total_servicos: parsedResponse.servicos.length
 		};
 
-		return enrichedResponse;
-
 	} catch (error) {
-		console.error('❌ Erro ao processar áudio com Gemini:', {
+		console.error('❌ Erro ao extrair informações com Gemini:', {
 			message: error.message,
 			response: error.response?.data,
 			status: error.response?.status
@@ -267,14 +305,18 @@ router.post('/process-audio', async (req, res) => {
 		if (uid) console.log(`👤 UID do usuário: ${uid}`);
 		if (clientId) console.log(`👥 ID do cliente: ${clientId}`);
 
-		// Processar áudio com IA
-		const processedData = await processAudioWithGemini(audioData, audioFormat);
+		// ETAPA 1: Transcrever áudio com Deepgram
+		const transcricao = await transcribeWithDeepgram(audioData, audioFormat);
+		console.log('📝 Transcrição:', transcricao);
+
+		// ETAPA 2: Extrair informações do texto com Gemini
+		const extractedData = await extractInfoWithGemini(transcricao);
 
 		// Log de sucesso
 		console.log('✅ Áudio processado com sucesso:', {
-			pecas_count: processedData.pecas_materiais?.length || 0,
-			servicos_count: processedData.servicos?.length || 0,
-			confianca_minima: processedData.metadata?.confianca_minima || 80
+			pecas_count: extractedData.total_pecas,
+			servicos_count: extractedData.total_servicos,
+			confianca_minima: extractedData.confianca_minima
 		});
 
 		// Retornar resposta estruturada
@@ -282,10 +324,19 @@ router.post('/process-audio', async (req, res) => {
 			success: true,
 			message: 'Áudio processado com sucesso',
 			data: {
-				transcricao: processedData.transcricao,
-				pecas_materiais: processedData.pecas_materiais,
-				servicos: processedData.servicos,
-				metadata: processedData.metadata
+				transcricao: transcricao,
+				pecas_materiais: extractedData.pecas_materiais,
+				servicos: extractedData.servicos,
+				metadata: {
+					modelo_transcricao: 'deepgram/nova-2',
+					modelo_extracao: 'google/gemini-2.5-flash-lite-preview-09-2025',
+					processado_em: new Date().toISOString(),
+					formato_audio: audioFormat,
+					confianca_minima: extractedData.confianca_minima,
+					tokens_utilizados: extractedData.tokens_utilizados,
+					total_pecas: extractedData.total_pecas,
+					total_servicos: extractedData.total_servicos
+				}
 			}
 		});
 
@@ -322,17 +373,20 @@ router.post('/process-audio', async (req, res) => {
  * GET /ai/status
  */
 router.get('/status', (req, res) => {
-	const isConfigured = !!process.env.OPENROUTER_API_KEY;
+	const deepgramConfigured = !!process.env.DEEPGRAM_API_KEY;
+	const openrouterConfigured = !!process.env.OPENROUTER_API_KEY;
 	
 	res.json({
 		success: true,
 		message: 'Status do serviço de IA',
 		data: {
-			api_configured: isConfigured,
-			model: 'google/gemini-2.5-flash-lite-preview-09-2025',
+			deepgram_configured: deepgramConfigured,
+			openrouter_configured: openrouterConfigured,
+			transcription_model: 'deepgram/nova-2',
+			extraction_model: 'google/gemini-2.5-flash-lite-preview-09-2025',
 			supported_formats: ['wav', 'mp3', 'ogg', 'webm', 'flac'],
 			endpoint: '/ai/process-audio',
-			status: isConfigured ? 'ready' : 'not_configured',
+			status: (deepgramConfigured && openrouterConfigured) ? 'ready' : 'not_configured',
 			timestamp: new Date().toISOString()
 		}
 	});
