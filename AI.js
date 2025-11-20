@@ -19,34 +19,62 @@ async function processAudioWithVoxtral(audioData, audioFormat = 'wav') {
 			throw new Error('OPENROUTER_API_KEY não configurada no .env');
 		}
 
-		// Prompt especializado para extrair informações técnicas de manutenção
-		const systemPrompt = `Você é um escrivão especializado em relatórios técnicos de manutenção.
+	// Prompt especializado para extrair informações técnicas de manutenção
+	const systemPrompt = `Você é um transcritor técnico especializado em extrair informações EXATAS de áudios de técnicos.
 
-Sua tarefa é:
-1. Transcrever o áudio com precisão
-2. Listar todas as peças/componentes mencionados no audio.
-3. Extrair ações ou serviços mencionados no audio.
-Observação: cite no resultado apenas as informações técnicas mencionadas no áudio, nada além disso.
+REGRAS FUNDAMENTAIS:
+1. Extraia LITERALMENTE as palavras mencionadas no áudio - NÃO INTERPRETE, NÃO TRADUZA, NÃO SUBSTITUA
+2. Se o técnico diz "compressor", você escreve "compressor" - NUNCA "condensador" ou outro termo
+3. Mantenha a EXATA nomenclatura falada, incluindo marcas, modelos e termos coloquiais
+4. Para cada item extraído, você DEVE incluir um score de confiança (0-100)
+5. APENAS inclua itens com confiança >= 80%
+6. Se não tiver certeza absoluta do que foi dito, NÃO inclua no resultado
+
 Formato de resposta esperado (JSON):
-IMPORTANTE: Retorne APENAS um objeto JSON válido no seguinte formato, sem texto adicional:
 {
-  "audio_transcrito": "transcrição completa do áudio aqui",
-  "resultado": {
-    "problema_mencionado": "descrição clara do problema ou problemas mencionados no áudio ou 'Nenhum problema específico identificado' se não houver",
-    "pecas_mencionadas": ["peça1", "peça2", "peça3"],
-    "acao_necessaria": ["ação1", "ação2", "ação3"]
-  }
+  "pecas_materiais": [
+    {
+      "material1": "nome EXATO mencionado no áudio (literal)",
+      "quantidade": "número ou null se não mencionado",
+      "confianca": 95
+    },
+    {
+      "material2": "nome EXATO mencionado no áudio (literal)",
+      "quantidade": "número ou null se não mencionado",
+      "confianca": 88
+    }
+  ],
+  "servicos": [
+    {
+      "servico1": "descrição EXATA do serviço mencionado",
+      "confianca": 92
+    },
+    {
+      "servico2": "descrição EXATA do serviço mencionado",
+      "confianca": 85
+    }
+  ]
 }
 
-Regras:
-- Se não houver problemas identificados, use: "Nenhum problema específico mencionado"
-- Se não houver peças mencionadas, retorne array vazio: []
-- Se não houver ações mencionadas, retorne array vazio: []
-- Seja específico e profissional
-- Use termos técnicos apropriados da área de refrigeração, climatização ou linha branca
-- Não adicione explicações ou texto fora do JSON solicitado`;
+INSTRUÇÕES CRÍTICAS:
+- Use "material1", "material2", "material3" como chaves (incremental)
+- Use "servico1", "servico2", "servico3" como chaves (incremental)
+- Se confiança < 80%, NÃO INCLUA o item
+- Se nenhuma peça for mencionada com confiança >= 80%, retorne "pecas_materiais": []
+- Se nenhum serviço for mencionado com confiança >= 80%, retorne "servicos": []
+- NÃO adicione texto explicativo, APENAS o JSON
+- Quantidade sempre como string ou null
+- Confiança sempre como número inteiro (0-100)
 
-		console.log('🤖 Enviando áudio para processamento com Voxtral...');
+EXEMPLOS DO QUE NÃO FAZER:
+❌ Áudio diz "compressor" → Você escreve "condensador" (ERRADO!)
+❌ Áudio diz "gás R22" → Você escreve "fluido refrigerante" (ERRADO!)
+❌ Incluir item com confiança 75% (ERRADO!)
+
+EXEMPLOS DO QUE FAZER:
+✅ Áudio diz "compressor" → Você escreve "compressor"
+✅ Áudio diz "gás R22" → Você escreve "gás R22"
+✅ Apenas itens com confiança >= 80%`;		console.log('🤖 Enviando áudio para processamento com Voxtral...');
 
 		const response = await axios.post(
 			'https://openrouter.ai/api/v1/chat/completions',
@@ -109,27 +137,49 @@ Regras:
 			}
 		}
 
-		// Validar estrutura da resposta
-		if (!parsedResponse.resultado) {
-			throw new Error('Resposta da IA não contém campo "resultado"');
+		// FILTRAR ITENS COM BAIXA CONFIANÇA (< 80%)
+		const CONFIANCA_MINIMA = 80;
+		
+		// Filtrar peças/materiais
+		if (parsedResponse.pecas_materiais && Array.isArray(parsedResponse.pecas_materiais)) {
+			parsedResponse.pecas_materiais = parsedResponse.pecas_materiais.filter(item => {
+				const confianca = item.confianca || 0;
+				if (confianca < CONFIANCA_MINIMA) {
+					console.log(`⚠️ Material removido por baixa confiança (${confianca}%):`, item);
+					return false;
+				}
+				return true;
+			});
+		} else {
+			parsedResponse.pecas_materiais = [];
 		}
 
-		// Garantir que arrays existam
-		if (!Array.isArray(parsedResponse.resultado.pecas_mencionadas)) {
-			parsedResponse.resultado.pecas_mencionadas = [];
-		}
-		if (!Array.isArray(parsedResponse.resultado.acao_necessaria)) {
-			parsedResponse.resultado.acao_necessaria = [];
+		// Filtrar serviços
+		if (parsedResponse.servicos && Array.isArray(parsedResponse.servicos)) {
+			parsedResponse.servicos = parsedResponse.servicos.filter(item => {
+				const confianca = item.confianca || 0;
+				if (confianca < CONFIANCA_MINIMA) {
+					console.log(`⚠️ Serviço removido por baixa confiança (${confianca}%):`, item);
+					return false;
+				}
+				return true;
+			});
+		} else {
+			parsedResponse.servicos = [];
 		}
 
 		// Adicionar metadados
 		const enrichedResponse = {
-			...parsedResponse,
+			pecas_materiais: parsedResponse.pecas_materiais,
+			servicos: parsedResponse.servicos,
 			metadata: {
 				modelo_ia: 'mistralai/voxtral-small-24b-2507',
 				processado_em: new Date().toISOString(),
 				formato_audio: audioFormat,
-				tokens_utilizados: response.data.usage || null
+				confianca_minima: CONFIANCA_MINIMA,
+				tokens_utilizados: response.data.usage || null,
+				total_pecas: parsedResponse.pecas_materiais.length,
+				total_servicos: parsedResponse.servicos.length
 			}
 		};
 
@@ -201,10 +251,9 @@ router.post('/process-audio', async (req, res) => {
 
 		// Log de sucesso
 		console.log('✅ Áudio processado com sucesso:', {
-			audio_transcrito_length: processedData.audio_transcrito?.length || 0,
-			problemas_encontrados: processedData.resultado?.problema_identificado || 'N/A',
-			pecas_count: processedData.resultado?.pecas_mencionadas?.length || 0,
-			acoes_count: processedData.resultado?.acao_necessaria?.length || 0
+			pecas_count: processedData.pecas_materiais?.length || 0,
+			servicos_count: processedData.servicos?.length || 0,
+			confianca_minima: processedData.metadata?.confianca_minima || 80
 		});
 
 		// Retornar resposta estruturada
@@ -212,8 +261,8 @@ router.post('/process-audio', async (req, res) => {
 			success: true,
 			message: 'Áudio processado com sucesso',
 			data: {
-				audio_transcrito: processedData.audio_transcrito,
-				resultado: processedData.resultado,
+				pecas_materiais: processedData.pecas_materiais,
+				servicos: processedData.servicos,
 				metadata: processedData.metadata
 			}
 		});
