@@ -89,9 +89,13 @@ CRÍTICO: Os exemplos abaixo são APENAS para mostrar o formato, NÃO copie os v
 						]
 					}
 				],
-				temperature: 0.3, // Baixa temperatura para respostas mais consistentes
+				temperature: 0.3,
 				max_tokens: 2000,
-				response_format: { type: 'json_object' } // Forçar resposta em JSON
+				response_format: { type: 'json_object' },
+				// Desabilita cache para evitar respostas repetidas
+				headers: {
+					'anthropic-cache-control': 'no-cache'
+				}
 			},
 			{
 				headers: {
