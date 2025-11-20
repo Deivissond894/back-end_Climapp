@@ -19,45 +19,17 @@ async function processAudioWithVoxtral(audioData, audioFormat = 'wav') {
 			throw new Error('OPENROUTER_API_KEY não configurada no .env');
 		}
 
-	// Prompt especializado para extrair informações técnicas de manutenção
-	const systemPrompt = `Você é um transcritor técnico especializado em extrair informações LITERAIS e EXATAS de áudios de técnicos de refrigeração, ar-condicionado ou manutenção industrial.
+	// Prompt especializado para transcrição de áudio
+	const systemPrompt = `Você é um transcritor de áudio especializado. Transcreva EXATAMENTE o que foi dito no áudio, palavra por palavra.
 
-**REGRAS ABSOLUTAS (NÃO NEGOCIÁVEIS):**
-1. Extraia APENAS as palavras exatas mencionadas no áudio.
-2. Inclua APENAS itens com confiança ≥ 80% (use sua métrica interna de reconhecimento de fala).
-3. Quantidades devem ser registradas como string (ex: "2") ou "null" se não mencionadas.
-4. Use chaves incrementais no JSON: "material1", "material2", "servico1", "servico2", etc.
-5. Se NADA for mencionado com clareza ≥ 80%, retorne arrays vazios: [].
-6. NUNCA adicione informações não ditas no áudio.
+**INSTRUÇÕES:**
+1. Retorne APENAS a transcrição literal do áudio.
+2. Não adicione, interprete ou modifique nada.
+3. Mantenha a pontuação natural da fala.
+4. Se não entender alguma parte, use [inaudível].
 
-**FORMATO DE SAÍDA (JSON):**
-{
-  "pecas_materiais": [
-    {
-      "material1": "nome EXATO mencionado",
-      "quantidade": "número ou null",
-      "confianca": 95
-    }
-  ],
-  "servicos": [
-    {
-      "servico1": "descrição EXATA mencionada",
-      "confianca": 92
-    }
-  ]
-}
-
-**INSTRUÇÕES PARA ÁUDIOS SEM INFORMAÇÕES CLARAS:**
-- Se nenhum item atingir confiança ≥ 80%, retorne:
-{
-  "pecas_materiais": [],
-  "servicos": []
-}
-
-**PROIBIÇÕES:**
-- ❌ Não interprete termos (ex: "gás" ≠ "refrigerante").
-- ❌ Não complete informações ausentes.
-- ❌ Não use sinônimos ou padronizações.`;		console.log('🤖 Enviando áudio para processamento com Voxtral...');
+**FORMATO DE SAÍDA:**
+Retorne apenas o texto transcrito, sem formatação adicional.`;		console.log('🤖 Enviando áudio para processamento com Voxtral...');
 
 		const response = await axios.post(
 			'https://openrouter.ai/api/v1/chat/completions',
@@ -73,7 +45,7 @@ async function processAudioWithVoxtral(audioData, audioFormat = 'wav') {
 						content: [
 							{
 								type: 'text',
-								text: 'Analise este áudio de relatório técnico e extraia as informações conforme o formato solicitado:'
+								text: 'Transcreva este áudio:'
 							},
 							{
 								type: 'input_audio',
@@ -87,7 +59,6 @@ async function processAudioWithVoxtral(audioData, audioFormat = 'wav') {
 				],
 				temperature: 0.3,
 				max_tokens: 2000,
-				response_format: { type: 'json_object' },
 				// Desabilita cache para evitar respostas repetidas
 				headers: {
 					'anthropic-cache-control': 'no-cache'
@@ -106,71 +77,19 @@ async function processAudioWithVoxtral(audioData, audioFormat = 'wav') {
 
 		console.log('✅ Resposta recebida da API OpenRouter');
 
-		// Extrair a resposta da IA
-		const aiResponse = response.data.choices[0].message.content;
-		
-		// Parse do JSON retornado
-		let parsedResponse;
-		try {
-			parsedResponse = JSON.parse(aiResponse);
-		} catch (parseError) {
-			console.error('❌ Erro ao fazer parse da resposta JSON:', parseError);
-			// Tentar extrair JSON da resposta se estiver envolvido em texto
-			const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-			if (jsonMatch) {
-				parsedResponse = JSON.parse(jsonMatch[0]);
-			} else {
-				throw new Error('Resposta da IA não está em formato JSON válido');
-			}
-		}
+		// Extrair a transcrição
+		const transcricao = response.data.choices[0].message.content;
 
-		// FILTRAR ITENS COM BAIXA CONFIANÇA (< 80%)
-		const CONFIANCA_MINIMA = 80;
-		
-		// Filtrar peças/materiais
-		if (parsedResponse.pecas_materiais && Array.isArray(parsedResponse.pecas_materiais)) {
-			parsedResponse.pecas_materiais = parsedResponse.pecas_materiais.filter(item => {
-				const confianca = item.confianca || 0;
-				if (confianca < CONFIANCA_MINIMA) {
-					console.log(`⚠️ Material removido por baixa confiança (${confianca}%):`, item);
-					return false;
-				}
-				return true;
-			});
-		} else {
-			parsedResponse.pecas_materiais = [];
-		}
-
-		// Filtrar serviços
-		if (parsedResponse.servicos && Array.isArray(parsedResponse.servicos)) {
-			parsedResponse.servicos = parsedResponse.servicos.filter(item => {
-				const confianca = item.confianca || 0;
-				if (confianca < CONFIANCA_MINIMA) {
-					console.log(`⚠️ Serviço removido por baixa confiança (${confianca}%):`, item);
-					return false;
-				}
-				return true;
-			});
-		} else {
-			parsedResponse.servicos = [];
-		}
-
-		// Adicionar metadados
-		const enrichedResponse = {
-			pecas_materiais: parsedResponse.pecas_materiais,
-			servicos: parsedResponse.servicos,
+		// Retornar apenas a transcrição
+		return {
+			transcricao: transcricao.trim(),
 			metadata: {
 				modelo_ia: 'mistralai/voxtral-small-24b-2507',
 				processado_em: new Date().toISOString(),
 				formato_audio: audioFormat,
-				confianca_minima: CONFIANCA_MINIMA,
-				tokens_utilizados: response.data.usage || null,
-				total_pecas: parsedResponse.pecas_materiais.length,
-				total_servicos: parsedResponse.servicos.length
+				tokens_utilizados: response.data.usage || null
 			}
 		};
-
-		return enrichedResponse;
 
 	} catch (error) {
 		console.error('❌ Erro ao processar áudio com Voxtral:', {
@@ -237,19 +156,14 @@ router.post('/process-audio', async (req, res) => {
 		const processedData = await processAudioWithVoxtral(audioData, audioFormat);
 
 		// Log de sucesso
-		console.log('✅ Áudio processado com sucesso:', {
-			pecas_count: processedData.pecas_materiais?.length || 0,
-			servicos_count: processedData.servicos?.length || 0,
-			confianca_minima: processedData.metadata?.confianca_minima || 80
-		});
+		console.log('✅ Áudio processado com sucesso');
 
 		// Retornar resposta estruturada
 		return res.status(200).json({
 			success: true,
 			message: 'Áudio processado com sucesso',
 			data: {
-				pecas_materiais: processedData.pecas_materiais,
-				servicos: processedData.servicos,
+				transcricao: processedData.transcricao,
 				metadata: processedData.metadata
 			}
 		});
