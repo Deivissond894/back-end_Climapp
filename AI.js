@@ -4,61 +4,76 @@ const axios = require('axios');
 require('dotenv').config();
 
 /**
- * Função para transcrever áudio usando Deepgram
+ * Função para transcrever áudio usando Groq (Whisper)
  * @param {string} audioData - Áudio em formato base64
  * @param {string} audioFormat - Formato do áudio (wav, mp3, etc.)
  * @returns {Promise<string>} - Texto transcrito
  */
-async function transcribeWithDeepgram(audioData, audioFormat = 'wav') {
+async function transcribeWithGroq(audioData, audioFormat = 'wav') {
 	try {
-		const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
+		const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-		if (!DEEPGRAM_API_KEY) {
-			throw new Error('DEEPGRAM_API_KEY não configurada no .env');
+		if (!GROQ_API_KEY) {
+			throw new Error('GROQ_API_KEY não configurada no .env');
 		}
 
-		console.log('🎙️ Enviando áudio para transcrição com Deepgram...');
+		console.log('🎙️ Enviando áudio para transcrição com Groq Whisper...');
 
 		// Converter base64 para buffer
 		const audioBuffer = Buffer.from(audioData, 'base64');
 
-		// Mapear formato para MIME type
-		const mimeTypes = {
-			'wav': 'audio/wav',
-			'mp3': 'audio/mp3',
-			'webm': 'audio/webm',
-			'ogg': 'audio/ogg',
-			'flac': 'audio/flac'
+		// Criar FormData
+		const FormData = require('form-data');
+		const form = new FormData();
+		
+		// Mapear formato para extensão correta
+		const extensionMap = {
+			'wav': 'wav',
+			'mp3': 'mp3',
+			'webm': 'webm',
+			'ogg': 'ogg',
+			'flac': 'flac',
+			'm4a': 'm4a'
 		};
+		
+		const extension = extensionMap[audioFormat] || 'wav';
+		
+		form.append('file', audioBuffer, {
+			filename: `audio.${extension}`,
+			contentType: `audio/${audioFormat}`
+		});
+		form.append('model', 'whisper-large-v3');
+		form.append('language', 'pt');
+		form.append('response_format', 'json');
 
 		const response = await axios.post(
-			'https://api.deepgram.com/v1/listen?model=nova-2&language=pt-BR&smart_format=true',
-			audioBuffer,
+			'https://api.groq.com/openai/v1/audio/transcriptions',
+			form,
 			{
 				headers: {
-					'Authorization': `Token ${DEEPGRAM_API_KEY}`,
-					'Content-Type': mimeTypes[audioFormat] || 'audio/wav'
+					'Authorization': `Bearer ${GROQ_API_KEY}`,
+					...form.getHeaders()
 				},
 				timeout: 60000
 			}
 		);
 
-		const transcricao = response.data.results.channels[0].alternatives[0].transcript;
-		console.log('✅ Transcrição concluída com Deepgram');
+		const transcricao = response.data.text;
+		console.log('✅ Transcrição concluída com Groq Whisper');
 
 		return transcricao;
 
 	} catch (error) {
-		console.error('❌ Erro ao transcrever com Deepgram:', {
+		console.error('❌ Erro ao transcrever com Groq:', {
 			message: error.message,
 			response: error.response?.data,
 			status: error.response?.status
 		});
 
 		if (error.response?.status === 401) {
-			throw new Error('Chave de API do Deepgram inválida ou não configurada');
+			throw new Error('Chave de API do Groq inválida ou não configurada');
 		} else if (error.response?.status === 429) {
-			throw new Error('Limite de requisições do Deepgram excedido');
+			throw new Error('Limite de requisições do Groq excedido');
 		}
 
 		throw error;
@@ -87,7 +102,7 @@ async function extractInfoWithGemini(transcricao) {
 1. Extraia APENAS as palavras exatas mencionadas no áudio.
 2. Se o técnico diz "compressor Danfoss XYZ", retorne EXATAMENTE "compressor Danfoss XYZ" — NUNCA substitua por sinônimos ou interpretações.
 3. Inclua APENAS itens com confiança ≥ 80% (use sua métrica interna de reconhecimento de fala).
-4. Quantidades devem ser registradas como string (ex: "2") ou "null" se não mencionadas.
+4. Quantidades devem ser registradas como string. Se NÃO for mencionada quantidade, use "1" como padrão.
 5. Use chaves incrementais no JSON: "material1", "material2", "servico1", "servico2", etc.
 6. Se NADA for mencionado com clareza ≥ 80%, retorne arrays vazios: [].
 7. NUNCA adicione informações não ditas no áudio.
@@ -97,7 +112,7 @@ async function extractInfoWithGemini(transcricao) {
   "pecas_materiais": [
     {
       "material1": "nome EXATO mencionado",
-      "quantidade": "número ou null",
+      "quantidade": "número ou 1 se não mencionado",
       "confianca": 95
     }
   ],
@@ -305,8 +320,8 @@ router.post('/process-audio', async (req, res) => {
 		if (uid) console.log(`👤 UID do usuário: ${uid}`);
 		if (clientId) console.log(`👥 ID do cliente: ${clientId}`);
 
-		// ETAPA 1: Transcrever áudio com Deepgram
-		const transcricao = await transcribeWithDeepgram(audioData, audioFormat);
+		// ETAPA 1: Transcrever áudio com Groq (Whisper)
+		const transcricao = await transcribeWithGroq(audioData, audioFormat);
 		console.log('📝 Transcrição:', transcricao);
 
 		// ETAPA 2: Extrair informações do texto com Gemini
@@ -328,7 +343,7 @@ router.post('/process-audio', async (req, res) => {
 				pecas_materiais: extractedData.pecas_materiais,
 				servicos: extractedData.servicos,
 				metadata: {
-					modelo_transcricao: 'deepgram/nova-2',
+					modelo_transcricao: 'groq/whisper-large-v3',
 					modelo_extracao: 'google/gemini-2.5-flash-lite-preview-09-2025',
 					processado_em: new Date().toISOString(),
 					formato_audio: audioFormat,
@@ -373,20 +388,20 @@ router.post('/process-audio', async (req, res) => {
  * GET /ai/status
  */
 router.get('/status', (req, res) => {
-	const deepgramConfigured = !!process.env.DEEPGRAM_API_KEY;
+	const groqConfigured = !!process.env.GROQ_API_KEY;
 	const openrouterConfigured = !!process.env.OPENROUTER_API_KEY;
 	
 	res.json({
 		success: true,
 		message: 'Status do serviço de IA',
 		data: {
-			deepgram_configured: deepgramConfigured,
+			groq_configured: groqConfigured,
 			openrouter_configured: openrouterConfigured,
-			transcription_model: 'deepgram/nova-2',
+			transcription_model: 'groq/whisper-large-v3',
 			extraction_model: 'google/gemini-2.5-flash-lite-preview-09-2025',
-			supported_formats: ['wav', 'mp3', 'ogg', 'webm', 'flac'],
+			supported_formats: ['wav', 'mp3', 'ogg', 'webm', 'flac', 'm4a'],
 			endpoint: '/ai/process-audio',
-			status: (deepgramConfigured && openrouterConfigured) ? 'ready' : 'not_configured',
+			status: (groqConfigured && openrouterConfigured) ? 'ready' : 'not_configured',
 			timestamp: new Date().toISOString()
 		}
 	});
