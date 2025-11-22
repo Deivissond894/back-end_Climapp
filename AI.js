@@ -96,76 +96,28 @@ async function extractInfoWithGemini(transcricao) {
 		}
 
 	// Prompt especializado para extrair informações de texto transcrito
-	const systemPrompt = `Você é um analisador técnico especializado em extrair informações LITERAIS e EXATAS de textos transcritos de técnicos de refrigeração, ar-condicionado ou manutenção industrial.
+	const systemPrompt = `Extraia informações EXATAS de textos técnicos de refrigeração/ar-condicionado.
 
-**REGRAS ABSOLUTAS (NÃO NEGOCIÁVEIS):**
-1. Extraia APENAS as palavras exatas mencionadas no áudio.
-2. Se o técnico diz "compressor Danfoss XYZ", retorne EXATAMENTE "compressor Danfoss XYZ" — NUNCA substitua por sinônimos ou interpretações.
-3. Inclua APENAS itens com confiança ≥ 80% (use sua métrica interna de reconhecimento de fala).
-4. Quantidades devem ser registradas como string. Se NÃO for mencionada quantidade, use "1" como padrão.
-5. Use chaves incrementais no JSON: "material1", "material2", "servico1", "servico2", etc.
-6. Se NADA for mencionado com clareza ≥ 80%, retorne arrays vazios: [].
-7. NUNCA adicione informações não ditas no áudio.
+**MATERIAIS:**
+- Nome literal mencionado
+- Quantidade: "1" se não informada
+- Confiança mínima: 80%
 
-**FORMATO DE SAÍDA (JSON):**
+**SERVIÇOS:**
+- Apenas peças citadas → "Mão de obra"
+- Serviço específico citado → nome exato
+
+**JSON:**
 {
-  "pecas_materiais": [
-    {
-      "material1": "nome EXATO mencionado",
-      "quantidade": "número ou 1 se não mencionado",
-      "confianca": 95
-    }
-  ],
-  "servicos": [
-    {
-      "servico1": "descrição EXATA mencionada",
-      "confianca": 92
-    }
-  ]
+  "pecas_materiais": [{"material1": "nome", "quantidade": "1", "confianca": 95}],
+  "servicos": [{"servico1": "Mão de obra", "confianca": 100}]
 }
 
-**EXEMPLO DE SAÍDA:**
-Para o texto: "Trocar o compressor Embraco EGX120, dois capacitores de 40µF e fazer limpeza do sistema com gás R-410A", retorne:
-{
-  "pecas_materiais": [
-    {
-      "material1": "compressor Embraco EGX120",
-      "quantidade": "1",
-      "confianca": 100
-    },
-    {
-      "material2": "capacitores de 40µF",
-      "quantidade": "2",
-      "confianca": 98
-    }
-  ],
-  "servicos": [
-    {
-      "servico1": "troca do compressor",
-      "confianca": 100
-    },
-    {
-      "servico2": "limpeza do sistema",
-      "confianca": 95
-    },
-    {
-      "servico3": "troca do gás R-410A",
-      "confianca": 90
-    }
-  ]
-}
+**Exemplos:**
+"Trocar correia" → servico1: "Mão de obra", material1: "correia"
+"Limpeza evaporador" → servico1: "Limpeza evaporador"
 
-**INSTRUÇÕES PARA TEXTOS SEM INFORMAÇÕES CLARAS:**
-- Se nenhum item atingir confiança ≥ 80%, retorne:
-{
-  "pecas_materiais": [],
-  "servicos": []
-}
-
-**PROIBIÇÕES:**
-- ❌ Não interprete termos (ex: "gás" ≠ "refrigerante").
-- ❌ Não complete informações ausentes.
-- ❌ Não use sinônimos ou padronizações.`;
+Retorne [] se confiança < 80%.`;
 
 		console.log('🤖 Analisando texto com Gemini 2.5 Flash Lite...');
 
