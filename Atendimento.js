@@ -12,6 +12,118 @@ const ESTAGIOS_VALIDOS = [
 	'Garantia'
 ];
 
+/**
+ * Endpoint para salvar orçamento do atendimento
+ * POST /atendimentos/:atendimentoId/orcamento
+ */
+router.post('/:atendimentoId/orcamento', async (req, res) => {
+	try {
+		const { atendimentoId } = req.params;
+		const { 
+			userId, 
+			clienteNome, 
+			produto,
+			materiais,
+			servicos,
+			garantia,
+			visitaRecebida,
+			valorVisita,
+			valorTotal,
+			timestamp
+		} = req.body;
+
+		// Validação básica
+		if (!userId) {
+			return res.status(400).json({
+				success: false,
+				message: 'userId é obrigatório',
+				error: 'MISSING_USER_ID'
+			});
+		}
+
+		if (!atendimentoId) {
+			return res.status(400).json({
+				success: false,
+				message: 'atendimentoId é obrigatório',
+				error: 'MISSING_ATENDIMENTO_ID'
+			});
+		}
+
+		console.log(`💼 Salvando orçamento do atendimento ${atendimentoId}...`);
+
+		const db = admin.firestore();
+		const atendimentoRef = db.collection('Users').doc(userId).collection('Atendimentos').doc(atendimentoId);
+
+		// Verificar se o atendimento existe
+		const atendimentoDoc = await atendimentoRef.get();
+		if (!atendimentoDoc.exists) {
+			return res.status(404).json({
+				success: false,
+				message: 'Atendimento não encontrado',
+				error: 'ATENDIMENTO_NOT_FOUND'
+			});
+		}
+
+		// Preparar dados do orçamento
+		const orcamentoData = {
+			clienteNome: clienteNome || '',
+			produto: produto || '',
+			materiais: materiais || [],
+			servicos: servicos || [],
+			garantia: garantia || {
+				temGarantia: false,
+				tipo: '',
+				tempo: ''
+			},
+			visitaRecebida: visitaRecebida || false,
+			valorVisita: valorVisita || '0,00',
+			valorTotal: valorTotal || 'R$ 0,00',
+			timestamp: timestamp || new Date().toISOString(),
+			updatedAt: admin.firestore.FieldValue.serverTimestamp()
+		};
+
+		// Atualizar atendimento com orçamento
+		await atendimentoRef.update({
+			orcamento: orcamentoData,
+			Status: 'Aguardando', // Atualiza status para Aguardando após criar orçamento
+			updatedAt: admin.firestore.FieldValue.serverTimestamp()
+		});
+
+		console.log('✅ Orçamento salvo com sucesso');
+
+		return res.status(200).json({
+			success: true,
+			message: 'Orçamento salvo com sucesso',
+			data: {
+				atendimentoId,
+				orcamento: orcamentoData
+			}
+		});
+
+	} catch (error) {
+		console.error('❌ Erro ao salvar orçamento:', {
+			message: error.message,
+			stack: error.stack
+		});
+
+		return res.status(500).json({
+			success: false,
+			message: 'Erro ao salvar orçamento',
+			error: error.message
+		});
+	}
+});
+
+// Estágios válidos para o status do atendimento
+const ESTAGIOS_VALIDOS_OLD = [
+	'Diagnóstico',
+	'Aguardando',
+	'Aprovado',
+	'Recusado',
+	'Executado',
+	'Garantia'
+];
+
 // Função para validar e normalizar o status
 function normalizarStatus(status) {
 	// Se status for null, undefined ou vazio, retorna "Diagnóstico"
@@ -20,7 +132,7 @@ function normalizarStatus(status) {
 	}
 	
 	// Verifica se o status está na lista de estágios válidos
-	if (ESTAGIOS_VALIDOS.includes(status)) {
+	if (ESTAGIOS_VALIDOS_OLD.includes(status)) {
 		return status;
 	}
 	
