@@ -13,6 +13,7 @@ const {
 const clientRoutes = require('./Client');
 const aiRoutes = require('./AI');
 const atendimentoRoutes = require('./Atendimento');
+const uploadRoutes = require('./Upload');
 
 const app = express();
 const PORT = process.env.PORT || 10000; // Render usa porta 10000 por padrão
@@ -46,6 +47,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/clientes', clientRoutes);
 app.use('/ai', aiRoutes);
 app.use('/atendimentos', atendimentoRoutes);
+app.use('/upload', uploadRoutes);
 
 // Middleware de tratamento de erros
 const errorHandler = (err, req, res, next) => {
