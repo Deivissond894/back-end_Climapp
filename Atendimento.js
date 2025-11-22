@@ -25,6 +25,7 @@ router.post('/:atendimentoId/orcamento', async (req, res) => {
 			produto,
 			materiais,
 			servicos,
+			imagens,
 			garantia,
 			visitaRecebida,
 			valorVisita,
@@ -50,13 +51,18 @@ router.post('/:atendimentoId/orcamento', async (req, res) => {
 		}
 
 		console.log(`💼 Salvando orçamento do atendimento ${atendimentoId}...`);
+		console.log(`👤 userId: ${userId}`);
 
 		const db = admin.firestore();
-		const atendimentoRef = db.collection('Users').doc(userId).collection('Atendimentos').doc(atendimentoId);
+		
+		// Caminho correto: Usuarios/{userId}/Atendimentos/{atendimentoId}
+		const atendimentoRef = db.collection('Usuarios').doc(userId).collection('Atendimentos').doc(atendimentoId);
 
 		// Verificar se o atendimento existe
 		const atendimentoDoc = await atendimentoRef.get();
+		
 		if (!atendimentoDoc.exists) {
+			console.log(`❌ Atendimento ${atendimentoId} não encontrado em Usuarios/${userId}/Atendimentos/`);
 			return res.status(404).json({
 				success: false,
 				message: 'Atendimento não encontrado',
@@ -64,12 +70,15 @@ router.post('/:atendimentoId/orcamento', async (req, res) => {
 			});
 		}
 
+		console.log(`✅ Atendimento encontrado, preparando dados do orçamento...`);
+
 		// Preparar dados do orçamento
 		const orcamentoData = {
 			clienteNome: clienteNome || '',
 			produto: produto || '',
 			materiais: materiais || [],
 			servicos: servicos || [],
+			imagens: imagens || [],
 			garantia: garantia || {
 				temGarantia: false,
 				tipo: '',
@@ -79,17 +88,17 @@ router.post('/:atendimentoId/orcamento', async (req, res) => {
 			valorVisita: valorVisita || '0,00',
 			valorTotal: valorTotal || 'R$ 0,00',
 			timestamp: timestamp || new Date().toISOString(),
-			updatedAt: admin.firestore.FieldValue.serverTimestamp()
+			salvoEm: new Date().toISOString()
 		};
 
-		// Atualizar atendimento com orçamento
+		// Atualizar atendimento com orçamento DENTRO do documento
 		await atendimentoRef.update({
 			orcamento: orcamentoData,
-			Status: 'Aguardando', // Atualiza status para Aguardando após criar orçamento
-			updatedAt: admin.firestore.FieldValue.serverTimestamp()
+			Status: 'Aguardando',
+			atualizadoEm: new Date().toISOString()
 		});
 
-		console.log('✅ Orçamento salvo com sucesso');
+		console.log('✅ Orçamento salvo com sucesso no documento do atendimento');
 
 		return res.status(200).json({
 			success: true,
