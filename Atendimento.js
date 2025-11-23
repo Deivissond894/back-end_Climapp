@@ -13,10 +13,10 @@ const ESTAGIOS_VALIDOS = [
 ];
 
 /**
- * Endpoint para salvar orçamento do atendimento
- * POST /atendimentos/:atendimentoId/orcamento
+ * Endpoint para atualizar orçamento do atendimento
+ * PUT /atendimentos/:atendimentoId/orcamento
  */
-router.post('/:atendimentoId/orcamento', async (req, res) => {
+router.put('/:atendimentoId/orcamento', async (req, res) => {
 	try {
 		const { atendimentoId } = req.params;
 		const { 
@@ -72,10 +72,8 @@ router.post('/:atendimentoId/orcamento', async (req, res) => {
 
 		console.log(`✅ Atendimento encontrado, preparando dados do orçamento...`);
 
-		// Preparar dados do orçamento
+		// Preparar dados do orçamento para atualização
 		const orcamentoData = {
-			clienteNome: clienteNome || '',
-			produto: produto || '',
 			materiais: materiais || [],
 			servicos: servicos || [],
 			imagens: imagens || [],
@@ -84,25 +82,26 @@ router.post('/:atendimentoId/orcamento', async (req, res) => {
 				tipo: '',
 				tempo: ''
 			},
-			visitaRecebida: visitaRecebida || false,
+			visitaRecebida: visitaRecebida !== undefined ? visitaRecebida : false,
 			valorVisita: valorVisita || '0,00',
 			valorTotal: valorTotal || 'R$ 0,00',
 			timestamp: timestamp || new Date().toISOString(),
-			salvoEm: new Date().toISOString()
+			salvoEm: new Date().toISOString(),
+			preenchido: true
 		};
 
-		// Atualizar atendimento com orçamento DENTRO do documento
+		// Atualizar APENAS o campo orcamento dentro do documento
 		await atendimentoRef.update({
-			orcamento: orcamentoData,
-			Status: 'Aguardando',
-			atualizadoEm: new Date().toISOString()
+			'orcamento': orcamentoData,
+			'Status': 'Aguardando',
+			'atualizadoEm': new Date().toISOString()
 		});
 
-		console.log('✅ Orçamento salvo com sucesso no documento do atendimento');
+		console.log('✅ Orçamento atualizado com sucesso no documento do atendimento');
 
 		return res.status(200).json({
 			success: true,
-			message: 'Orçamento salvo com sucesso',
+			message: 'Orçamento atualizado com sucesso',
 			data: {
 				atendimentoId,
 				orcamento: orcamentoData
@@ -110,14 +109,14 @@ router.post('/:atendimentoId/orcamento', async (req, res) => {
 		});
 
 	} catch (error) {
-		console.error('❌ Erro ao salvar orçamento:', {
+		console.error('❌ Erro ao atualizar orçamento:', {
 			message: error.message,
 			stack: error.stack
 		});
 
 		return res.status(500).json({
 			success: false,
-			message: 'Erro ao salvar orçamento',
+			message: 'Erro ao atualizar orçamento',
 			error: error.message
 		});
 	}
@@ -162,7 +161,19 @@ function sanitizeAtendimentoData(data) {
 		hora: data.hora || "",
 		modelo: data.modelo || "",
 		valorVisita: data.valorVisita || "",
-		Status: normalizarStatus(data.Status) // Normaliza o status
+		Status: normalizarStatus(data.Status), // Normaliza o status
+		// Campos do orçamento inicializados como null
+		orcamento: {
+			materiais: null,
+			servicos: null,
+			imagens: null,
+			garantia: null,
+			visitaRecebida: null,
+			valorVisita: null,
+			valorTotal: null,
+			timestamp: null,
+			preenchido: false
+		}
 	};
 }
 
